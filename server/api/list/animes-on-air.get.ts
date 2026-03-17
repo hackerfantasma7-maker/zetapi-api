@@ -1,6 +1,19 @@
 import { getOnAir } from "animeflv-scraper";
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+  // 1. PERMISOS CORS (FUNDAMENTAL PARA EL SENA Y TU PROYECTO)
+  setResponseHeaders(event, {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  });
+
+  // 2. RESPUESTA PARA LA PRE-CONSULTA
+  if (getMethod(event) === 'OPTIONS') {
+    return 'ok';
+  }
+
+  // 3. LÓGICA DE OBTENCIÓN DE DATOS
   const onair = await getOnAir();
   if (!onair) {
     throw createError({
@@ -15,6 +28,7 @@ export default defineEventHandler(async () => {
   };
 });
 
+// DOCUMENTACIÓN OPENAPI (SE MANTIENE IGUAL)
 defineRouteMeta({
   openAPI: {
     tags: ["List"],
@@ -22,7 +36,7 @@ defineRouteMeta({
     description: "Obtiene una lista de animes en emisión.",
     responses: {
       200: {
-        description: "Retorna un arreglo de objetos que contienen información como el título, el tipo, el slug, y la url del anime. Estos objetos están ordenados de acuerdo a su fecha de transmisión, los animes más recientes estarán en la parte inferior del arreglo.",
+        description: "Retorna un arreglo de objetos...",
         content: {
           "application/json": {
             schema: {
@@ -42,7 +56,8 @@ defineRouteMeta({
                     required: ["title", "type", "slug", "url"]
                   }
                 }
-              }
+              },
+              required: ["success", "data"]
             }
           }
         }
