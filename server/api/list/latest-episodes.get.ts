@@ -1,6 +1,19 @@
 import { getLatest } from "animeflv-scraper";
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+  // 1. CONFIGURACIÓN DE PERMISOS (CORS) - ESTO ARREGLA LA PANTALLA NEGRA
+  setResponseHeaders(event, {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  });
+
+  // 2. MANEJO DE PRE-CONSULTA
+  if (getMethod(event) === 'OPTIONS') {
+    return 'ok';
+  }
+
+  // 3. OBTENCIÓN DE DATOS
   const latest = await getLatest();
   if (!latest) {
     throw createError({
@@ -15,6 +28,7 @@ export default defineEventHandler(async () => {
   };
 });
 
+// ESTO ES LO QUE VEÍAS LARGO, ES SOLO DOCUMENTACIÓN Y DEBE QUEDARSE AQUÍ:
 defineRouteMeta({
   openAPI: {
     tags: ["List"],
@@ -22,7 +36,7 @@ defineRouteMeta({
     description: "Obtiene una lista de últimos episodios lanzados.",
     responses: {
       200: {
-        description: "Retorna un arreglo de objetos que contienen información como el título, el capítulo, la portada, el slug y la url del episodio. Estos objetos están ordenados de manera cronológica, los últimos episodios estarán en la parte superior del arreglo.",
+        description: "Retorna un arreglo de objetos...",
         content: {
           "application/json": {
             schema: {
