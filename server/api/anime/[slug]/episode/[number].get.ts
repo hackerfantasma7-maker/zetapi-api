@@ -1,42 +1,32 @@
-import { getEpisode } from "animeflv-scraper";
+import { getEpisodeServers } from "animeflv-scraper";
 
-export default defineCachedEventHandler(async (event) => {
+export default defineEventHandler(async (event) => {
 
-  setResponseHeaders(event, {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "*",
-    "Access-Control-Max-Age": "86400",
-  });
+  const { slug, number } = getRouterParams(event);
+  const { lang } = getQuery(event) as { lang?: string };
 
-  if (getMethod(event) === 'OPTIONS') {
-    event.node.res.statusCode = 204;
-    return 'ok';
+  const episodeSlug = `${slug}-${number}`;
+
+  if (!lang || lang === "sub") {
+    const servers = await getEpisodeServers(episodeSlug);
+
+    return { success: true, lang: "sub", data: servers };
   }
 
-  const { slug, number } = getRouterParams(event) as { slug: string, number: string };
-  const episode = await getEpisode(slug, Number(number));
-
-  if (!episode) {
-    throw createError({
-      statusCode: 404,
-      message: "No se ha encontrado el episodio",
-      data: { success: false }
+  if (lang === "latino") {
+    const html = await $fetch<string>(`https://monoschinos2.com/ver/${episodeSlug}`, {
+      headers: { "User-Agent": "Mozilla/5.0" }
     });
+
+    const servers = [];
+    const iframeRegex = /<iframe.*?src="(.*?)"/g;
+
+    let match;
+    while ((match = iframeRegex.exec(html)) !== null) {
+      servers.push({ name: "latino", embed: match[1] });
+    }
+
+    return { success: true, lang: "latino", data: servers };
   }
 
-  return {
-    success: true,
-    data: episode
-  };
-
-}, {
-  swr: false,
-  maxAge: 86400,
-  name: "episode",
-  group: "anime",
-  getKey: (event) => {
-    const { slug, number } = getRouterParams(event) as { slug: string, number: string };
-    return `${slug}-${number}`;
-  }
 });
