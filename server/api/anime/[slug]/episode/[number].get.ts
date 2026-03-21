@@ -71,14 +71,12 @@ async function getLatinoEpisode(slug: string, number: string) {
 
     const servers = [];
 
-    // Buscamos el JSON de videos que suele estar en un script
     const videoDataMatch = html.match(/var\s+video\s*=\s*(\[.*?\]);/);
     
     if (videoDataMatch) {
       try {
         const videos = JSON.parse(videoDataMatch[1]);
         for (const vid of videos) {
-          // Limpiamos el embed si viene con HTML
           const cleanEmbed = vid.code.match(/src="(.*?)"/)?.[1] || vid.code;
           
           servers.push({
@@ -92,7 +90,6 @@ async function getLatinoEpisode(slug: string, number: string) {
       }
     }
 
-    // Backup: Si el JSON falla, intentamos capturar cualquier iframe de video
     if (servers.length === 0) {
       const iframeRegex = /<iframe.*?src="(.*?)"/g;
       let m;
@@ -116,3 +113,38 @@ async function getLatinoEpisode(slug: string, number: string) {
     return null;
   }
 }
+
+// --- DOCUMENTACIÓN OPENAPI ---
+defineRouteMeta({
+  openAPI: {
+    tags: ["Anime"],
+    summary: "Servidores de Video del Episodio",
+    description: "Obtiene los enlaces de reproducción (iframes) para un episodio específico. Soporta contenido subtitulado y latino.",
+    parameters: [
+      {
+        name: "slug",
+        in: "path",
+        required: true,
+        description: "Slug del anime",
+        schema: { type: "string" }
+      },
+      {
+        name: "number",
+        in: "path",
+        required: true,
+        description: "Número del episodio",
+        schema: { type: "string" }
+      },
+      {
+        name: "lang",
+        in: "query",
+        description: "Idioma: 'latino' o dejar vacío para sub",
+        schema: { type: "string", enum: ["latino", ""] }
+      }
+    ],
+    responses: {
+      200: { description: "Lista de servidores obtenida" },
+      404: { description: "Episodio o servidores no encontrados" }
+    }
+  }
+});
