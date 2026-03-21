@@ -1,38 +1,12 @@
-import { getLatest } from "animeflv-scraper";
+import { getLatestEpisodes } from "animeflv-scraper";
 
-export default defineEventHandler(async (event) => {
+export default defineCachedEventHandler(async () => {
 
-  setResponseHeaders(event, {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "*",
-    "Access-Control-Max-Age": "86400"
-  });
+  const latest = await getLatestEpisodes();
 
-  if (getMethod(event) === 'OPTIONS') {
-    event.node.res.statusCode = 204;
-    return 'ok';
-  }
+  return {
+    success: true,
+    data: latest
+  };
 
-  try {
-    const latest = await getLatest();
-
-    if (!latest) {
-      throw createError({
-        statusCode: 404,
-        message: "No se encontraron episodios",
-      });
-    }
-
-    return {
-      success: true,
-      data: latest
-    };
-
-  } catch (error) {
-    throw createError({
-      statusCode: 500,
-      message: "Error en el servidor de Anime",
-    });
-  }
-});
+}, { maxAge: 300 });
