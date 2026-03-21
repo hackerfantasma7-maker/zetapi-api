@@ -1,12 +1,13 @@
 import { searchAnimesByFilter, GenreEnum, StatusEnum, TypeEnum, OrderEnum } from "animeflv-scraper";
 
+// Extraemos los valores válidos para las validaciones
 const genres = Object.values(GenreEnum);
 const statuses = Object.values(StatusEnum);
 const types = Object.values(TypeEnum);
 const orders = Object.values(OrderEnum);
 
-export default defineEventHandler(async (event) => {
-  // 1. CONFIGURACIÓN DE CABECERAS (CORS Total)
+export default defineCachedEventHandler(async (event) => {
+  // 1. CONFIGURACIÓN DE CORS (Autoridad Total)
   setResponseHeaders(event, {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -14,40 +15,19 @@ export default defineEventHandler(async (event) => {
     "Access-Control-Max-Age": "86400",
   });
 
-  // Respuesta rápida para pre-flight
   if (getMethod(event) === 'OPTIONS') {
     event.node.res.statusCode = 204;
     return 'ok';
   }
 
+  // 2. EXTRACCIÓN DE DATOS
   const body = await readBody(event);
-  const { order, page } = getQuery(event) as { order: string, page: number };
+  const query = getQuery(event);
+  const order = String(query.order || "default");
+  const page = Number(query.page) || 1;
 
-  // 2. VALIDACIONES DE SEGURIDAD
-  if (order && !orders?.includes(order)) {
-    throw createError({
-      statusCode: 400,
-      message: `Orden no válido: ${order}`,
-    });
-  }
-
-  const invalid_types = body?.types?.filter((t: string) => !types?.includes(t));
-  if (invalid_types?.length) {
-    throw createError({
-      statusCode: 400,
-      message: `Tipos no válidos: ${invalid_types?.join(", ")}`,
-    });
-  }
-
-  const invalid_genres = body?.genres?.filter((g: string) => !genres?.includes(g));
-  if (invalid_genres?.length) {
-    throw createError({
-      statusCode: 400,
-      message: `Géneros no válidos: ${invalid_genres?.join(", ")}`,
-    });
-  }
-
-  // 3. MAPEO DE ORDEN
+  // 3. VALIDACIONES DE SEGURIDAD
+  // Mapeo de órdenes para que coincidan con lo que espera el scraper
   const orderKeyMap: Record<string, string> = {
     default: "Por Defecto",
     updated: "Recientemente Actualizados",
@@ -63,10 +43,10 @@ export default defineEventHandler(async (event) => {
     const search = await searchAnimesByFilter({ 
       ...body, 
       order: mappedOrder, 
-      page: Number(page) || 1 
+      page: page 
     });
     
-    if (!search || !search?.media?.length) {
+    if (!search || (search.media && search.media.length === 0)) {
       throw createError({
         statusCode: 404,
         message: "No se han encontrado resultados para estos filtros",
@@ -81,9 +61,20 @@ export default defineEventHandler(async (event) => {
   } catch (error: any) {
     throw createError({
       statusCode: error.statusCode || 500,
-      message: "Error al filtrar animes en AnimeFLV",
-      data: { error: error.message }
+      message: error.message || "Error al filtrar animes",
     });
+  }
+}, {
+  // Configuración de Caché (6 horas)
+  swr: true,
+  maxAge: 21600,
+  name: "filter",
+  group: "anime",
+  getKey: async (event) => {
+    const body = await readBody(event);
+    const query = getQuery(event);
+    // Creamos una llave única basada en los filtros y la página
+    return `filter-${JSON.stringify(body)}-${query.order || 'def'}-${query.page || 1}`;
   }
 });
 
@@ -91,11 +82,39 @@ export default defineEventHandler(async (event) => {
 defineRouteMeta({
   openAPI: {
     tags: ["Search"],
-    summary: "Busca usando filtros",
-    description: "Filtra animes por género, estado y tipo (Solo AnimeFLV).",
+    summary: "Busca usando filtros (POST)",
+    description: "Filtra animes por género, estado y tipo enviando un JSON en el body.",
     parameters: [
-      { name: "order", in: "query", schema: { type: "string", enum: ["default", "updated", "added", "title", "rating"] } },
-      { name: "page", in: "query", schema: { type: "number" } }
-    ]
+      { 
+        name: "order", 
+        in: "query", 
+        required: false,
+        schema: { type: "string", enum: ["default", "updated", "added", "title", "rating"] } 
+      },
+      { 
+        name: "page", 
+        in: "query", 
+        required: false,
+        schema: { type: "number", default: 1 } 
+      }
+    ],
+    requestBody: {
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            properties: {
+              genres: { type: "array", items: { type: "string" } },
+              types: { type: "array", items: { type: "string" } },
+              statuses: { type: "array", items: { type: "string" } }
+            }
+          }
+        }
+      }
+    },
+    responses: {
+      200: { description: "Resultados filtrados con éxito" },
+      404: { description: "Sin resultados" }
+    }
   }
 });
