@@ -22,10 +22,9 @@ export default defineCachedEventHandler(async (event) => {
     let info;
 
     if (lang === 'latino') {
-      // Lógica para extraer info de AnimeLatinoHD
       info = await getLatinoInfo(slug);
     } else {
-      // Lógica por defecto (AnimeFLV)
+      // AnimeFLV (Subtitulado)
       info = await getAnimeInfo(slug).catch(() => null);
     }
 
@@ -66,42 +65,39 @@ async function getLatinoInfo(slug: string) {
   
   try {
     const html = await $fetch<string>(url, {
-      headers: { "User-Agent": "Mozilla/5.0" }
+      headers: { "User-Agent": "Mozilla/5.0" },
+      timeout: 10000
     });
 
-    // Extraemos Sinopsis y Título con Regex
+    // Extraemos Datos con Regex
     const title = html.match(/<h1.*?>(.*?)<\/h1>/)?.[1] || slug;
-    const synopsis = html.match(/<div class="sinopsis">(.*?)<\/div>/)?.[1] || "Sin sinopsis disponible";
+    const synopsisMatch = html.match(/<div class="sinopsis">([\s\S]*?)<\/div>/)?.[1] || "Sin sinopsis disponible";
     const cover = html.match(/<div class="anime-poster">[\s\S]*?src="(.*?)"/)?.[1] || "";
 
-    // Extraemos la lista de episodios (Formato simplificado)
-    const episodesRegex = /<a href="\/ver\/.*?\/(.*?)"[\s\S]*?<span>Episodio (.*?)<\/span>/g;
+    // Extraemos la lista de episodios
+    const episodesRegex = /href="\/ver\/.*?\/(\d+)"/g;
     const episodes = [];
     let match;
 
     while ((match = episodesRegex.exec(html)) !== null) {
+      const epNum = match[1];
       episodes.push({
-        number: Number(match[2]),
-        slug: `${slug}-${match[2]}`, // Generamos un slug único para el episodio
-        url: `https://www.animelatinohd.com/ver/${slug}/${match[2]}`
+        number: Number(epNum),
+        // IMPORTANTE: El url debe apuntar a TU API para que el video cargue
+        url: `/anime/${slug}/episode/${epNum}?lang=latino`
       });
     }
 
     return {
       title: title.trim(),
-      alternative_titles: [],
-      status: "Finalizado",
-      rating: "N/A",
       type: "Anime",
       cover: cover,
-      synopsis: synopsis.replace(/<[^>]*>?/gm, '').trim(),
+      synopsis: synopsisMatch.replace(/<[^>]*>?/gm, '').trim(), // Limpia el HTML de la sinopsis
       genres: ["Latino"],
-      episodes: episodes.reverse(), // De más reciente a más viejo
-      url: url
+      episodes: episodes.sort((a, b) => b.number - a.number), // Ordenados de mayor a menor
+      source: "latino"
     };
   } catch (e) {
     return null;
   }
 }
-
-// TU DOCUMENTACIÓN OPENAPI SE MANTIENE ABAJO...
