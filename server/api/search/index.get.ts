@@ -1,7 +1,7 @@
 import { searchAnime } from "animeflv-scraper";
 
 export default defineEventHandler(async (event) => {
-  // 1. CONFIGURACIÓN DE CORS (Autoridad Total)
+  // 1. CONFIGURACIÓN DE CORS
   setResponseHeaders(event, {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -38,12 +38,10 @@ export default defineEventHandler(async (event) => {
         break;
 
       default:
-        // Japonés Subtitulado (AnimeFLV) - Convertimos page a número
         results = await searchAnime(query, Number(page) || 1);
         break;
     }
     
-    // Validamos que existan resultados para evitar errores en el frontend
     if (!results || (results.media && results.media.length === 0)) {
       throw createError({
         statusCode: 404,
@@ -58,7 +56,6 @@ export default defineEventHandler(async (event) => {
     };
 
   } catch (error: any) {
-    // CAPTURA DE ERROR GLOBAL: Evita que el servidor de Base44 se caiga
     throw createError({
       statusCode: error.statusCode || 500,
       message: error.message || "Error interno en el motor de búsqueda",
@@ -66,7 +63,7 @@ export default defineEventHandler(async (event) => {
   }
 });
 
-// --- FUNCIONES MOTORAS (Scrapers Blindados con Regex) ---
+// --- FUNCIONES MOTORAS ---
 
 async function searchAnimeLatino(query: string, page: string) {
   const url = `https://www.animelatinohd.com/busqueda?q=${encodeURIComponent(query)}`;
@@ -74,7 +71,7 @@ async function searchAnimeLatino(query: string, page: string) {
   try {
     const html = await $fetch<string>(url, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-      timeout: 10000 // Si la web no responde en 10s, cancelamos
+      timeout: 10000 
     });
 
     const regex = /<div class="anime-card">[\s\S]*?href="\/anime\/(.*?)"[\s\S]*?src="(.*?)"[\s\S]*?<h3.*?>(.*?)<\/h3>/g;
@@ -84,7 +81,6 @@ async function searchAnimeLatino(query: string, page: string) {
     while ((match = regex.exec(html)) !== null) {
       media.push({
         title: match[3].trim(),
-        // Aseguramos que la URL de la imagen sea completa
         cover: match[2].startsWith('http') ? match[2] : `https://www.animelatinohd.com${match[2]}`,
         slug: match[1],
         type: "Anime",
@@ -93,18 +89,13 @@ async function searchAnimeLatino(query: string, page: string) {
       });
     }
 
-    return { 
-      currentPage: 1, 
-      hasNextPage: false, 
-      media 
-    };
+    return { currentPage: 1, hasNextPage: false, media };
   } catch (e) {
     return { currentPage: 1, media: [] };
   }
 }
 
 async function searchInJK(query: string, page: string) {
-  // JKAnime usa paginación en la URL
   const url = `https://jkanime.net/buscar/${encodeURIComponent(query)}/${page || 1}/`;
   
   try {
@@ -118,7 +109,6 @@ async function searchInJK(query: string, page: string) {
     let match;
 
     while ((match = regex.exec(html)) !== null) {
-      // Extraemos el slug del final de la URL (ej: /anime-name/)
       const slug = match[1].split('/').filter(Boolean).pop();
       media.push({
         title: match[3].trim(),
@@ -132,10 +122,44 @@ async function searchInJK(query: string, page: string) {
 
     return { 
       currentPage: Number(page) || 1, 
-      hasNextPage: html.includes('Next'), // Detección simple de página siguiente
+      hasNextPage: html.includes('Next'), 
       media 
     };
   } catch (e) {
     return { currentPage: 1, media: [] };
   }
 }
+
+// --- DOCUMENTACIÓN OPENAPI (Esto es lo que faltaba para el despliegue) ---
+defineRouteMeta({
+  openAPI: {
+    tags: ["Search"],
+    summary: "Buscador Global Híbrido",
+    description: "Busca animes por texto. Soporta AnimeFLV (default), AnimeLatinoHD (latino) y JKAnime (jkanime).",
+    parameters: [
+      {
+        name: "query",
+        in: "query",
+        required: true,
+        description: "Nombre del anime a buscar",
+        schema: { type: "string" }
+      },
+      {
+        name: "page",
+        in: "query",
+        description: "Número de página",
+        schema: { type: "string", default: "1" }
+      },
+      {
+        name: "lang",
+        in: "query",
+        description: "Idioma/Fuente: latino, jkanime o dejar vacío para subtitulado",
+        schema: { type: "string", enum: ["latino", "jkanime", ""] }
+      }
+    ],
+    responses: {
+      200: { description: "Resultados encontrados" },
+      404: { description: "Sin resultados" }
+    }
+  }
+});
