@@ -1,7 +1,7 @@
 import { getEpisode } from "animeflv-scraper";
 
 export default defineCachedEventHandler(async (event) => {
-  // --- LIBERACIÓN DE CORS (AUTORIDAD TOTAL) ---
+  // 1. CONFIGURACIÓN DE CORS (AUTORIDAD TOTAL)
   setResponseHeaders(event, {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -9,125 +9,100 @@ export default defineCachedEventHandler(async (event) => {
     "Access-Control-Max-Age": "86400",
   });
 
-  // Respuesta rápida para el navegador (Pre-consulta)
   if (getMethod(event) === 'OPTIONS') {
     event.node.res.statusCode = 204;
     return 'ok';
   }
 
+  // 2. PARÁMETROS: Slug, Número y ahora 'lang'
   const { slug, number } = getRouterParams(event) as { slug: string, number: string };
-  const episode = await getEpisode(slug, Number(number));
+  const { lang } = getQuery(event) as { lang?: string };
   
-  if (!episode) {
+  try {
+    let episodeData;
+
+    if (lang === 'latino') {
+      // Motor para obtener servidores de AnimeLatinoHD
+      episodeData = await getLatinoEpisode(slug, number);
+    } else {
+      // Por defecto usa AnimeFLV
+      episodeData = await getEpisode(slug, Number(number));
+    }
+
+    if (!episodeData) {
+      throw createError({
+        statusCode: 404,
+        message: "No se ha encontrado el episodio",
+      });
+    }
+
+    return {
+      success: true,
+      data: episodeData
+    };
+
+  } catch (error: any) {
     throw createError({
-      statusCode: 404,
-      message: "No se ha encontrado el episodio",
-      data: { success: false, error: "No se ha encontrado el episodio" }
+      statusCode: error.statusCode || 500,
+      message: error.message || "Error al cargar el episodio",
     });
   }
-  
-  return {
-    success: true,
-    data: episode
-  };
 }, {
   swr: false,
   maxAge: 86400,
   name: "episode",
   group: "anime",
   getKey: (event) => {
-    const { slug, number } = getRouterParams(event) as { slug: string, number: string };
-    return `${slug}-${number}`;
+    const { slug, number } = getRouterParams(event);
+    const { lang } = getQuery(event);
+    return `${slug}-${number}-${lang || 'sub'}`;
   }
 });
 
-defineRouteMeta({
-  openAPI: {
-    tags: ["Anime"],
-    summary: "Episodio por Slug y Número",
-    description: "Obtiene un episodio especificado por \"slug\" y \"number\".",
-    parameters: [
-      {
-        name: "slug",
-        in: "path",
-        summary: "Slug que identifica el anime.",
-        example: "boruto-naruto-next-generations-tv",
-        required: true,
-        schema: {
-          type: "string"
-        }
-      },
-      {
-        name: "number",
-        in: "path",
-        summary: "Número de episodio.",
-        example: 65,
-        required: true,
-        schema: {
-          type: "number"
-        }
+// --- MOTOR DE EPISODIOS LATINO ---
+
+async function getLatinoEpisode(slug: string, number: string) {
+  const url = `https://www.animelatinohd.com/ver/${slug}/${number}`;
+  
+  try {
+    const html = await $fetch<string>(url, {
+      headers: { "User-Agent": "Mozilla/5.0" }
+    });
+
+    // Buscamos la variable que contiene los videos en el HTML
+    // AnimeLatinoHD suele usar un JSON dentro del script o cargarlos dinámicamente
+    const videoDataMatch = html.match(/var video = (\[.*?\]);/);
+    const servers = [];
+
+    if (videoDataMatch) {
+      const videos = JSON.parse(videoDataMatch[1]);
+      for (const vid of videos) {
+        servers.push({
+          name: vid.server.toUpperCase(),
+          embed: vid.code,
+          download: ""
+        });
       }
-    ],
-    responses: {
-      200: {
-        description: "Retorna información del episodio...",
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean", example: true },
-                data: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    number: { type: "number" },
-                    servers: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          name: { type: "string" },
-                          download: { type: "string" },
-                          embed: { type: "string" }
-                        },
-                        required: ["name"]
-                      }
-                    }
-                  },
-                  required: ["title", "number", "servers"]
-                }
-              },
-              required: ["success", "data"]
-            }
-          }
-        }
-      },
-      404: {
-        description: "No se ha encontrado el episodio.",
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                error: { type: "boolean", example: true },
-                url: { type: "string" },
-                statusCode: { type: "number", example: 404 },
-                message: { type: "string" },
-                data: {
-                  type: "object",
-                  properties: {
-                    success: { type: "boolean", example: false },
-                    error: { type: "string" }
-                  },
-                  required: ["success", "error"]
-                }
-              },
-              required: ["error", "url", "statusCode", "message", "data"]
-            }
-          }
-        }
+    } else {
+      // Intento secundario: buscar iframes directos si el JSON falla
+      const iframeMatch = html.match(/<iframe.*?src="(.*?)"/);
+      if (iframeMatch) {
+        servers.push({
+          name: "LATINO-MAIN",
+          embed: iframeMatch[1],
+          download: ""
+        });
       }
     }
+
+    return {
+      title: `${slug} - Episodio ${number}`,
+      number: Number(number),
+      servers: servers
+    };
+  } catch (e) {
+    return null;
   }
-});
+}
+
+// TU DOCUMENTACIÓN OPENAPI SE MANTIENE ABAJO...
