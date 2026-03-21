@@ -1,32 +1,44 @@
 import { getEpisode } from "animeflv-scraper";
 
-export default defineCachedEventHandler(async (event) => {
-  // 1. CONFIGURACIÓN DE CORS (Autoridad Total)
-  setResponseHeaders(event, {
+export default defineEventHandler(async (event) => {
+  // 1. CONFIGURACIÓN DE CORS (Inyectado en cada respuesta)
+  const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "*",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
     "Access-Control-Max-Age": "86400",
-  });
+  };
 
-  // Respuesta rápida para pre-consulta (OPTIONS)
+  setResponseHeaders(event, corsHeaders);
+
+  // 2. MANEJO DE PRE-CONSULTA (PREFLIGHT)
+  // Lovable falla si esto no devuelve un status 200 o 204 limpio.
   if (getMethod(event) === 'OPTIONS') {
     event.node.res.statusCode = 204;
     return 'ok';
   }
 
-  // 2. EXTRACCIÓN DE PARÁMETROS
-  const { slug, number } = getRouterParams(event) as { slug: string, number: string };
-  
+  // 3. EXTRACCIÓN DE PARÁMETROS
+  const params = getRouterParams(event);
+  const slug = params.slug;
+  const number = params.number;
+
+  if (!slug || !number) {
+    throw createError({
+      statusCode: 400,
+      message: "Faltan parámetros: slug y number son requeridos",
+    });
+  }
+
   try {
-    // 3. CONSULTA AL SCRAPER ORIGINAL (AnimeFLV Subtitulado)
-    // Se elimina la bifurcación por 'lang' y el motor manual
+    // 4. CONSULTA AL SCRAPER
+    // Usamos Number(number) para asegurar que el scraper reciba un entero
     const episodeData = await getEpisode(slug, Number(number));
 
-    if (!episodeData || (episodeData.servers && episodeData.servers.length === 0)) {
+    if (!episodeData || !episodeData.servers || episodeData.servers.length === 0) {
       throw createError({
         statusCode: 404,
-        message: "No se han encontrado servidores disponibles para este episodio",
+        message: `No se encontraron servidores para ${slug} episodio ${number}`,
       });
     }
 
@@ -36,62 +48,10 @@ export default defineCachedEventHandler(async (event) => {
     };
 
   } catch (error: any) {
-    // 4. CAPTURA DE ERRORES
+    // 5. CAPTURA DE ERRORES
     throw createError({
       statusCode: error.statusCode || 500,
       message: error.message || "Error al cargar los servidores del episodio",
     });
-  }
-}, {
-  // Configuración de Caché (1 día)
-  swr: false,
-  maxAge: 86400,
-  name: "episode",
-  group: "anime",
-  getKey: (event) => {
-    const { slug, number } = getRouterParams(event);
-    return `${slug}-${number}`; // Simplificado: ya no requiere diferenciar por idioma
-  }
-});
-
-// --- DOCUMENTACIÓN OPENAPI ---
-defineRouteMeta({
-  openAPI: {
-    tags: ["Anime"],
-    summary: "Servidores de Video del Episodio",
-    description: "Obtiene los enlaces de reproducción (iframes) directamente de AnimeFLV.",
-    parameters: [
-      {
-        name: "slug",
-        in: "path",
-        required: true,
-        description: "Slug del anime (ej: black-clover-tv)",
-        schema: { type: "string" }
-      },
-      {
-        name: "number",
-        in: "path",
-        required: true,
-        description: "Número del episodio",
-        schema: { type: "string" }
-      }
-    ],
-    responses: {
-      200: { 
-        description: "Lista de servidores obtenida con éxito",
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                success: { type: "boolean" },
-                data: { type: "object" }
-              }
-            }
-          }
-        }
-      },
-      404: { description: "Episodio no encontrado" }
-    }
   }
 });
