@@ -24,39 +24,13 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    // 2. DETECCIÓN HÍBRIDA DE FUENTE
-    if (url.includes("animelatinohd.com")) {
-      // Lógica para URLs de AnimeLatinoHD
-      const slug = url.split("/anime/")[1]?.split("/")[0];
-      
-      if (!slug) {
-        throw createError({ statusCode: 400, message: "URL de LatinoHD no válida" });
-      }
-
-      // Devolvemos un formato compatible con lo que espera tu frontend
-      return {
-        success: true,
-        data: {
-          currentPage: 1,
-          hasNextPage: false,
-          media: [{
-            title: slug.replace(/-/g, " "),
-            slug: slug,
-            cover: "", // La info completa se cargará al entrar al perfil
-            type: "Anime",
-            url: `/anime/${slug}?lang=latino`
-          }]
-        }
-      };
-    }
-
-    // 3. LÓGICA ORIGINAL (AnimeFLV)
+    // 2. LÓGICA ORIGINAL (AnimeFLV exclusivamente)
     const search = await searchAnimesByURL(url);
     
     if (!search || !search?.media?.length) {
       throw createError({
         statusCode: 404,
-        message: "No se han encontrado resultados",
+        message: "No se han encontrado resultados en AnimeFLV",
       });
     }
 
@@ -66,7 +40,7 @@ export default defineEventHandler(async (event) => {
     };
 
   } catch (error: any) {
-    // 4. CAPTURA DE ERRORES PARA EVITAR CRASH
+    // 3. CAPTURA DE ERRORES
     throw createError({
       statusCode: error.statusCode || 500,
       message: "Error al procesar la URL",
@@ -80,7 +54,7 @@ defineRouteMeta({
   openAPI: {
     tags: ["Search"],
     summary: "Busca con URL de búsqueda",
-    description: "Soporta URLs de AnimeFLV y AnimeLatinoHD.",
+    description: "Soporta URLs originales de AnimeFLV.",
     parameters: [
       {
         name: "url",
