@@ -1,60 +1,53 @@
-// Cambiamos el nombre de la importación al correcto: getEpisodeServers
 import { getEpisodeServers } from "animeflv-scraper";
 
 export default defineCachedEventHandler(async (event) => {
-  // 1. CONFIGURACIÓN DE CORS
-  setResponseHeaders(event, {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "*",
-    "Access-Control-Max-Age": "86400",
-  });
 
-  if (getMethod(event) === 'OPTIONS') {
-    event.node.res.statusCode = 204;
-    return 'ok';
+  const { slug } = getRouterParams(event);
+  const { lang } = getQuery(event) as { lang?: string };
+
+  let servers;
+
+  if (!lang || lang === "sub") {
+    servers = await getEpisodeServers(slug);
   }
 
-  // 2. OBTENER SLUG
-  const slug = getRouterParam(event, 'slug');
-
-  try {
-    if (!slug) {
-      throw createError({
-        statusCode: 400,
-        message: "El parámetro 'slug' es requerido",
-      });
-    }
-
-    // 3. USAR LA FUNCIÓN CORRECTA
-    const servers = await getEpisodeServers(slug);
-
-    if (!servers || servers.length === 0) {
-      throw createError({
-        statusCode: 404,
-        message: `No se encontraron servidores para el episodio: ${slug}`,
-      });
-    }
-
-    return {
-      success: true,
-      data: servers
-    };
-
-  } catch (error: any) {
-    throw createError({
-      statusCode: error.statusCode || 500,
-      message: error.message || "Error al obtener servidores del episodio",
+  if (lang === "latino") {
+    const html = await $fetch<string>(`https://monoschinos2.com/ver/${slug}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "text/html",
+      }
     });
+
+    servers = [];
+
+    const base64Match = html.match(/atob\("(.*?)"\)/);
+
+    if (base64Match) {
+      try {
+        servers.push({
+          name: "latino",
+          embed: atob(base64Match[1])
+        });
+      } catch {}
+    }
+
+    const iframeRegex = /<iframe.*?src="(.*?)"/g;
+    let match;
+
+    while ((match = iframeRegex.exec(html)) !== null) {
+      servers.push({ name: "latino", embed: match[1] });
+    }
   }
-}, {
-  // Configuración de Caché (1 hora)
-  swr: true,
-  maxAge: 3600,
-  name: "episode-servers",
-  group: "anime",
-  getKey: (event) => {
-    const slug = getRouterParam(event, 'slug');
-    return `episode-${slug}`;
+
+  if (!servers || servers.length === 0) {
+    throw createError({ statusCode: 404, message: "No servers" });
   }
-});
+
+  return {
+    success: true,
+    lang: lang || "sub",
+    data: servers
+  };
+
+}, { maxAge: 1800 });
