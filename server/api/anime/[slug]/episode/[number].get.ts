@@ -1,45 +1,43 @@
 import { getEpisode } from "animeflv-scraper";
 
 export default defineEventHandler(async (event) => {
-  // 1. CONFIGURACIÓN DE CORS (Inyectado en cada respuesta)
-  const corsHeaders = {
+  // 1. CORS REFORZADO (Esto es lo que quita el error de 'preflight')
+  setResponseHeaders(event, {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Max-Age": "86400",
-  };
+  });
 
-  setResponseHeaders(event, corsHeaders);
-
-  // 2. MANEJO DE PRE-CONSULTA (PREFLIGHT)
-  // Lovable falla si esto no devuelve un status 200 o 204 limpio.
+  // Manejo de la petición OPTIONS (Preflight)
   if (getMethod(event) === 'OPTIONS') {
     event.node.res.statusCode = 204;
     return 'ok';
   }
 
-  // 3. EXTRACCIÓN DE PARÁMETROS
-  const params = getRouterParams(event);
-  const slug = params.slug;
-  const number = params.number;
-
-  if (!slug || !number) {
-    throw createError({
-      statusCode: 400,
-      message: "Faltan parámetros: slug y number son requeridos",
-    });
-  }
+  // 2. CAPTURA DEL SLUG "PEGADO" (Ej: sousou-no-frieren-2nd-season-9)
+  const { slug: fullSlug } = getRouterParams(event) as { slug: string };
 
   try {
-    // 4. CONSULTA AL SCRAPER
-    // Usamos Number(number) para asegurar que el scraper reciba un entero
-    const episodeData = await getEpisode(slug, Number(number));
-
-    if (!episodeData || !episodeData.servers || episodeData.servers.length === 0) {
-      throw createError({
-        statusCode: 404,
-        message: `No se encontraron servidores para ${slug} episodio ${number}`,
+    // 3. LÓGICA DE SEPARACIÓN INTELIGENTE
+    // Buscamos el último guion seguido de números (ej: -9)
+    const match = fullSlug.match(/(.+)-(\d+)$/);
+    
+    if (!match) {
+      throw createError({ 
+        statusCode: 400, 
+        message: "El formato del slug no es válido. Se esperaba 'nombre-anime-numero'" 
       });
+    }
+
+    const animeSlug = match[1]; // "sousou-no-frieren-2nd-season"
+    const episodeNumber = Number(match[2]); // 9
+
+    // 4. CONSULTA AL SCRAPER
+    const episodeData = await getEpisode(animeSlug, episodeNumber);
+
+    if (!episodeData) {
+      throw createError({ statusCode: 404, message: "Episodio no encontrado en AnimeFLV" });
     }
 
     return {
@@ -48,10 +46,9 @@ export default defineEventHandler(async (event) => {
     };
 
   } catch (error: any) {
-    // 5. CAPTURA DE ERRORES
     throw createError({
       statusCode: error.statusCode || 500,
-      message: error.message || "Error al cargar los servidores del episodio",
+      message: error.message || "Error interno al procesar el episodio",
     });
   }
 });
