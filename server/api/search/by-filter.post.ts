@@ -6,7 +6,7 @@ const types = Object.values(TypeEnum);
 const orders = Object.values(OrderEnum);
 
 export default defineEventHandler(async (event) => {
-  // --- LIBERACIÓN DE CORS (AUTORIDAD TOTAL) ---
+  // 1. CONFIGURACIÓN DE CABECERAS (CORS Total)
   setResponseHeaders(event, {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     "Access-Control-Max-Age": "86400",
   });
 
-  // Respuesta rápida para el navegador (Pre-consulta)
+  // Respuesta rápida para pre-flight
   if (getMethod(event) === 'OPTIONS') {
     event.node.res.statusCode = 204;
     return 'ok';
@@ -23,13 +23,11 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event);
   const { order, page } = getQuery(event) as { order: string, page: number };
 
-  // Validaciones de seguridad
-  const invalid_order = !orders?.includes(order);
-  if (order && invalid_order) {
+  // 2. VALIDACIONES DE SEGURIDAD
+  if (order && !orders?.includes(order)) {
     throw createError({
       statusCode: 400,
       message: `Orden no válido: ${order}`,
-      data: { success: false, error: `Orden no válido: ${order}`, hint: orders }
     });
   }
 
@@ -38,7 +36,6 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       message: `Tipos no válidos: ${invalid_types?.join(", ")}`,
-      data: { success: false, error: `Tipos no válidos: ${invalid_types?.join(", ")}`, hint: types }
     });
   }
 
@@ -47,27 +44,10 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       message: `Géneros no válidos: ${invalid_genres?.join(", ")}`,
-      data: { success: false, error: `Géneros no válidos: ${invalid_genres?.join(", ")}`, hint: genres }
     });
   }
 
-  const invalid_statuses = body?.statuses?.filter((s: number) => !statuses?.includes(s));
-  if (invalid_statuses?.length) {
-    throw createError({
-      statusCode: 400,
-      message: `Estados no válidos: ${invalid_statuses?.join(", ")}`,
-      data: { success: false, error: `Estados no válidos: ${invalid_statuses?.join(", ")}`, hint: StatusEnum }
-    });
-  }
-
-  if (body?.genres?.length > 4) {
-    throw createError({
-      statusCode: 400,
-      message: "Solo se permite un máximo de 4 géneros",
-      data: { success: false, error: "Solo se permite un máximo de 4 géneros" }
-    });
-  }
-
+  // 3. MAPEO DE ORDEN
   const orderKeyMap: Record<string, string> = {
     default: "Por Defecto",
     updated: "Recientemente Actualizados",
@@ -76,16 +56,20 @@ export default defineEventHandler(async (event) => {
     rating: "Calificación"
   };
 
-  const mappedOrder = orderKeyMap[order];
+  const mappedOrder = orderKeyMap[order] || "Por Defecto";
 
   try {
-    const search = await searchAnimesByFilter({ ...body, order: mappedOrder, page });
+    // 4. EJECUCIÓN DE BÚSQUEDA FILTRADA
+    const search = await searchAnimesByFilter({ 
+      ...body, 
+      order: mappedOrder, 
+      page: Number(page) || 1 
+    });
     
     if (!search || !search?.media?.length) {
       throw createError({
         statusCode: 404,
-        message: "No se han encontrado resultados",
-        data: { success: false, error: "No se han encontrado resultados" }
+        message: "No se han encontrado resultados para estos filtros",
       });
     }
 
@@ -93,52 +77,25 @@ export default defineEventHandler(async (event) => {
       success: true,
       data: search
     };
-  } catch (error) {
+
+  } catch (error: any) {
     throw createError({
-      statusCode: 500,
-      message: "Error interno al filtrar animes",
-      data: { success: false, error: error.message }
+      statusCode: error.statusCode || 500,
+      message: "Error al filtrar animes en AnimeFLV",
+      data: { error: error.message }
     });
   }
 });
 
+// --- DOCUMENTACIÓN OPENAPI ---
 defineRouteMeta({
   openAPI: {
     tags: ["Search"],
     summary: "Busca usando filtros",
-    description: "Ejecuta una búsqueda de animes utilizando filtros como tipo, géneros y estados.",
-    requestBody: {
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            properties: {
-              types: {
-                type: "array",
-                items: { type: "string", enum: ["tv", "movie", "special", "ova"] }
-              },
-              genres: {
-                type: "array",
-                items: { type: "string" },
-                maxItems: 4
-              },
-              statuses: {
-                type: "array",
-                items: { type: "number", enum: [1, 2, 3] }
-              }
-            }
-          }
-        }
-      }
-    },
+    description: "Filtra animes por género, estado y tipo (Solo AnimeFLV).",
     parameters: [
       { name: "order", in: "query", schema: { type: "string", enum: ["default", "updated", "added", "title", "rating"] } },
       { name: "page", in: "query", schema: { type: "number" } }
-    ],
-    responses: {
-      200: { description: "Resultados de la búsqueda filtrada." },
-      400: { description: "Parámetros de filtro inválidos." },
-      404: { description: "Sin resultados." }
-    }
+    ]
   }
 });
