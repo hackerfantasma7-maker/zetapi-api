@@ -1,16 +1,11 @@
 import { getEpisode } from "animeflv-scraper";
 
 export default defineCachedEventHandler(async (event) => {
-  // 🔐 API KEY
   const apiKey = getHeader(event, "x-api-key");
   if (apiKey !== process.env.API_KEY) {
-    throw createError({
-      statusCode: 401,
-      message: "Unauthorized"
-    });
+    throw createError({ statusCode: 401 });
   }
 
-  // 🌐 CORS
   setHeader(event, "Access-Control-Allow-Origin", "*");
   setHeader(event, "Access-Control-Allow-Methods", "GET,OPTIONS");
   setHeader(event, "Access-Control-Allow-Headers", "*");
@@ -19,88 +14,61 @@ export default defineCachedEventHandler(async (event) => {
 
   const { slug, number } = getRouterParams(event) as { slug: string, number: string };
 
-  const fetchHTML = async (url: string) => {
-    try {
-      return await $fetch<string>(url, {
-        headers: { "user-agent": "Mozilla/5.0" }
-      });
-    } catch {
-      return null;
-    }
-  };
+  const episode = await getEpisode(slug, Number(number)).catch(() => null);
 
-  // 🔥 FUENTES
-  const sources = await Promise.allSettled([
-    getEpisode(slug, Number(number)).catch(() => null),
-
-    // placeholders para otras páginas (estructura lista)
-    (async () => null)(), // monoschinos
-    (async () => null)(), // gogoanime
-    (async () => null)(), // animeonline ninja
-    (async () => null)(), // animeyt
-    (async () => null)()  // animelhd
-  ]);
-
-  const valid = sources
-    .filter((r: any) => r.status === "fulfilled" && r.value)
-    .map((r: any) => r.value);
-
-  if (!valid.length) {
-    throw createError({
-      statusCode: 404,
-      message: "No se encontró el episodio"
-    });
+  if (!episode) {
+    throw createError({ statusCode: 404 });
   }
 
-  // 🔥 UNIFICAR SERVIDORES
-  const allServers = valid.flatMap((s: any) => s.servers || []);
+  // 🔥 RESOLVER REALISTA
+  const resolveServers = (servers: any[]) => {
+    return servers.map((server: any) => {
+      const embed = server?.embed || "";
+      const download = server?.download || "";
 
-  const normalized = allServers.map((server: any) => {
-    const embed = server?.embed || "";
-    const download = server?.download || "";
+      let type = "embed";
+      let stream = null;
 
-    let type = "embed";
+      if (embed.includes(".m3u8") || download.includes(".m3u8")) {
+        type = "hls";
+        stream = embed || download;
+      } else if (embed.includes(".mp4") || download.includes(".mp4")) {
+        type = "mp4";
+        stream = embed || download;
+      }
 
-    if (embed.includes(".m3u8") || download.includes(".m3u8")) {
-      type = "hls";
-    } else if (embed.includes(".mp4") || download.includes(".mp4")) {
-      type = "mp4";
-    }
+      return {
+        name: server?.name,
+        type,
+        stream,
+        embed
+      };
+    });
+  };
 
-    return {
-      name: server?.name,
-      type,
-      embed,
-      download,
-      stream:
-        type === "hls"
-          ? embed || download
-          : type === "mp4"
-          ? embed || download
-          : null
-    };
+  let servers = resolveServers(episode.servers || []);
+
+  // 🔥 FILTRAR BASURA
+  servers = servers.filter((s) => s.stream || s.embed);
+
+  // 🔥 ORDEN PRIORIDAD
+  servers.sort((a, b) => {
+    const priority = { hls: 1, mp4: 2, embed: 3 };
+    return priority[a.type] - priority[b.type];
   });
 
-  // 🔥 ELIMINAR DUPLICADOS
+  // 🔥 UNIQUE
   const unique = Array.from(
-    new Map(normalized.map((s: any) => [s.name + s.stream, s])).values()
+    new Map(servers.map((s) => [s.name + s.stream, s])).values()
   );
 
   return {
     success: true,
-    totalServers: unique.length,
+    total: unique.length,
     data: {
-      ...valid[0],
+      title: episode.title,
+      number: episode.number,
       servers: unique
     }
   };
-}, {
-  swr: false,
-  maxAge: 86400,
-  name: "episode",
-  group: "anime",
-  getKey: (event) => {
-    const { slug, number } = getRouterParams(event) as { slug: string, number: string };
-    return `${slug}-${number}`;
-  }
 });
