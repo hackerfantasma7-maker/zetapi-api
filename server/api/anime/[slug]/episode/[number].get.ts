@@ -1,6 +1,19 @@
 import { getEpisode } from "animeflv-scraper";
 
 export default defineCachedEventHandler(async (event) => {
+  // 🌐 CORS (PRIMERO - IMPORTANTE PARA PREFLIGHT)
+  setHeader(event, "Access-Control-Allow-Origin", "*");
+  setHeader(event, "Access-Control-Allow-Methods", "GET,OPTIONS");
+  setHeader(event, "Access-Control-Allow-Headers", "Content-Type, x-api-key");
+
+  // 🔥 RESPUESTA CORRECTA PARA OPTIONS
+  if (event.method === "OPTIONS") {
+    return {
+      status: 200
+    };
+  }
+
+  // 🔐 API KEY (DESPUÉS DEL PREFLIGHT)
   const apiKey = getHeader(event, "x-api-key");
   const envKey =
     process.env.API_KEY ||
@@ -9,12 +22,6 @@ export default defineCachedEventHandler(async (event) => {
   if (!envKey || apiKey !== envKey) {
     throw createError({ statusCode: 401 });
   }
-
-  setHeader(event, "Access-Control-Allow-Origin", "*");
-  setHeader(event, "Access-Control-Allow-Methods", "GET,OPTIONS");
-  setHeader(event, "Access-Control-Allow-Headers", "*");
-
-  if (event.method === "OPTIONS") return;
 
   const { slug, number } = getRouterParams(event) as { slug: string, number: string };
 
