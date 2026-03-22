@@ -1,19 +1,16 @@
 import { getAnimeInfo } from "animeflv-scraper";
 
 export default defineCachedEventHandler(async (event) => {
-  // 🔐 API KEY
   const apiKey = getHeader(event, "x-api-key");
 
-const envKey =
-  process.env.API_KEY ||
-  event.context.cloudflare?.env?.API_KEY;
+  const envKey =
+    process.env.API_KEY ||
+    event.context.cloudflare?.env?.API_KEY;
 
-if (!envKey || apiKey !== envKey) {
-  throw createError({ statusCode: 401 });
-}
+  if (!envKey || apiKey !== envKey) {
+    throw createError({ statusCode: 401 });
   }
 
-  // 🌐 CORS
   setHeader(event, "Access-Control-Allow-Origin", "*");
   setHeader(event, "Access-Control-Allow-Methods", "GET,OPTIONS");
   setHeader(event, "Access-Control-Allow-Headers", "*");
@@ -23,13 +20,7 @@ if (!envKey || apiKey !== envKey) {
   const { slug } = getRouterParams(event) as { slug: string };
 
   const sources = await Promise.allSettled([
-    getAnimeInfo(slug).catch(() => null),
-
-    (async () => null)(), // monoschinos
-    (async () => null)(), // gogoanime
-    (async () => null)(), // animeonline ninja
-    (async () => null)(), // animeyt
-    (async () => null)()  // animelhd
+    getAnimeInfo(slug).catch(() => null)
   ]);
 
   const valid = sources
@@ -61,10 +52,4 @@ if (!envKey || apiKey !== envKey) {
       episodes: mergedEpisodes
     }
   };
-}, {
-  swr: false,
-  maxAge: 86400,
-  name: "episode-list",
-  group: "anime",
-  getKey: event => getRouterParams(event).slug
 });
