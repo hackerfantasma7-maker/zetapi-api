@@ -2,7 +2,12 @@ import { searchAnime } from "animeflv-scraper";
 
 export default defineEventHandler(async (event) => {
   const apiKey = getHeader(event, "x-api-key");
-  if (apiKey !== process.env.API_KEY) {
+
+  const envKey =
+    process.env.API_KEY ||
+    event.context.cloudflare?.env?.API_KEY;
+
+  if (!envKey || apiKey !== envKey) {
     throw createError({ statusCode: 401 });
   }
 
