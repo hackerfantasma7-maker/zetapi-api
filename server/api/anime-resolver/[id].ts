@@ -24,12 +24,10 @@ export default defineEventHandler(async (event) => {
 
   const { id } = getRouterParams(event) as { id: string };
 
-  // 🔥 1. OBTENER DATA DESDE ANILIST
+  // 🔥 ANILIST
   const anilist = await $fetch<any>("https://graphql.anilist.co", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: {
       query: `
         query ($id: Int) {
@@ -44,9 +42,7 @@ export default defineEventHandler(async (event) => {
           }
         }
       `,
-      variables: {
-        id: Number(id)
-      }
+      variables: { id: Number(id) }
     }
   }).catch(() => null);
 
@@ -59,61 +55,105 @@ export default defineEventHandler(async (event) => {
 
   const media = anilist.data.Media;
 
-  // 🔥 2. GENERAR POSIBLES NOMBRES
-  const names = [
+  // 🔥 NORMALIZADOR
+  const normalize = (t: string) =>
+    t
+      .toLowerCase()
+      .replace(/[:]/g, "")
+      .replace(/\(.*?\)/g, "")
+      .replace(/season \d+/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/[^\w-]/g, "")
+      .replace(/-+/g, "-")
+      .trim();
+
+  // 🔥 GENERADOR DE NOMBRES
+  const rawNames = [
     media.title?.romaji,
     media.title?.english,
     media.title?.native,
     ...(media.synonyms || [])
   ].filter(Boolean);
 
-  const normalize = (t: string) =>
-    t
-      .toLowerCase()
-      .replace(/[:]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/[^\w-]/g, "");
+  const expanded = rawNames.flatMap((name: string) => [
+    name,
+    name.replace(/:/g, ""),
+    name.replace(/-/g, " "),
+    name.replace(/\(.*?\)/g, ""),
+  ]);
 
   const candidates = Array.from(
-    new Set(names.map(normalize))
-  );
+    new Set(expanded.map(normalize))
+  ).filter(Boolean);
 
-  // 🔥 3. INTENTAR EN SCRAPER
-  let found: any = null;
-  let usedSlug = null;
+  // 🔥 SCORE INTELIGENTE
+  const score = (a: string, b: string) => {
+    a = normalize(a);
+    b = normalize(b);
+
+    if (a === b) return 100;
+
+    if (a.includes(b) || b.includes(a)) return 80;
+
+    const wordsA = a.split("-");
+    const wordsB = b.split("-");
+
+    let matches = 0;
+    wordsA.forEach(w => {
+      if (wordsB.includes(w)) matches++;
+    });
+
+    return (matches / Math.max(wordsA.length, wordsB.length)) * 100;
+  };
+
+  // 🔥 BUSQUEDA INTELIGENTE
+  let best: any = null;
+  let bestScore = 0;
 
   for (const name of candidates) {
     try {
       const search = await searchAnime(name, 1);
-      if (search?.media?.length) {
-        const first = search.media[0];
-        const info = await getAnimeInfo(first.slug).catch(() => null);
 
-        if (info) {
-          found = info;
-          usedSlug = first.slug;
-          break;
+      if (!search?.media?.length) continue;
+
+      for (const result of search.media) {
+        const s = score(name, result.title);
+
+        if (s > bestScore) {
+          bestScore = s;
+          best = result;
         }
       }
     } catch {}
   }
 
-  if (!found) {
+  if (!best || bestScore < 40) {
     throw createError({
       statusCode: 404,
       message: "No se pudo resolver el anime"
     });
   }
 
+  // 🔥 VALIDAR INFO REAL
+  const info = await getAnimeInfo(best.slug).catch(() => null);
+
+  if (!info) {
+    throw createError({
+      statusCode: 404,
+      message: "No se pudo obtener info del anime"
+    });
+  }
+
   return {
     success: true,
+    matchScore: bestScore,
     data: {
       anilistId: id,
-      resolvedSlug: usedSlug,
-      title: found.title,
-      cover: found.cover,
-      episodes: found.episodes || [],
-      totalEpisodes: found.episodes?.length || 0
+      resolvedSlug: best.slug,
+      title: info.title,
+      cover: info.cover,
+      episodes: info.episodes || [],
+      totalEpisodes: info.episodes?.length || 0
     }
   };
 });
