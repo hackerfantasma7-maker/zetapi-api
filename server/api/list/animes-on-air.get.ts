@@ -1,8 +1,12 @@
-import { getLatestEpisodes } from "animeflv-scraper";
+import { getLatest } from "animeflv-scraper";
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
 
-  const data = await getLatestEpisodes();
+  setResponseHeaders(event, {
+    "Access-Control-Allow-Origin": "*",
+  });
+
+  const data = await getLatest();
 
   return {
     success: true,
