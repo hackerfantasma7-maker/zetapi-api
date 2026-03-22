@@ -18,9 +18,9 @@ export default defineCachedEventHandler(async (event) => {
 
   if (event.method === "OPTIONS") return;
 
-  const { slug, number } = getRouterParams(event) as { slug: string, number: string };
+  const { slug } = getRouterParams(event) as { slug: string };
 
-  const episode = await getEpisode(slug, Number(number));
+  const episode = await getEpisode(slug);
 
   if (!episode) {
     throw createError({
@@ -30,7 +30,7 @@ export default defineCachedEventHandler(async (event) => {
     });
   }
 
-  // 🔥 NORMALIZACIÓN PARA TU PLAYER
+  // 🔥 NORMALIZACIÓN PARA PLAYER
   const normalizedServers = (episode.servers || []).map((server: any) => {
     const embed = server?.embed || "";
     const download = server?.download || "";
@@ -57,7 +57,7 @@ export default defineCachedEventHandler(async (event) => {
     };
   });
 
-  // 🔥 ORDENAR (MEJOR EXPERIENCIA)
+  // 🔥 ORDENAR POR PRIORIDAD
   const sortedServers = [
     ...normalizedServers.filter((s: any) => s.type === "hls"),
     ...normalizedServers.filter((s: any) => s.type === "mp4"),
@@ -84,33 +84,27 @@ export default defineCachedEventHandler(async (event) => {
   name: "episode",
   group: "anime",
   getKey: (event) => {
-    const { slug, number } = getRouterParams(event) as { slug: string, number: string };
-    return `${slug}-${number}`;
+    const { slug } = getRouterParams(event) as { slug: string };
+    return slug;
   }
 });
 
 defineRouteMeta({
   openAPI: {
     tags: ["Anime"],
-    summary: "Episodio optimizado para player",
-    description: "Obtiene episodio con servidores normalizados (hls/mp4/embed)",
+    summary: "Episodio por Slug (optimizado)",
+    description: "Obtiene episodio con servidores listos para player (hls/mp4/embed)",
     parameters: [
       {
         name: "slug",
         in: "path",
         required: true,
         schema: { type: "string" }
-      },
-      {
-        name: "number",
-        in: "path",
-        required: true,
-        schema: { type: "number" }
       }
     ],
     responses: {
       200: {
-        description: "Servidores listos para reproducción en player"
+        description: "Servidores optimizados para reproducción"
       }
     }
   }
