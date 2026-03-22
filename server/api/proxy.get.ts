@@ -13,7 +13,8 @@ export default defineEventHandler(async (event) => {
 
   const { url } = getQuery(event);
 
-  if (!url) {
+  // 🔥 VALIDACIÓN FUERTE
+  if (!url || typeof url !== "string") {
     throw createError({
       statusCode: 400,
       message: "URL requerida",
@@ -22,26 +23,35 @@ export default defineEventHandler(async (event) => {
 
   try {
 
-    const response = await fetch(url as string, {
+    const response = await fetch(url, {
       headers: {
         "User-Agent": "Mozilla/5.0",
-        "Referer": "https://www.google.com/"
-      }
+        "Referer": "https://www.google.com/",
+      },
     });
 
-    const contentType = response.headers.get("content-type") || "";
+    // 🔥 SI EL SERVER FALLA, PROPAGAMOS STATUS
+    if (!response.ok) {
+      throw createError({
+        statusCode: response.status,
+        message: "Error al obtener recurso externo",
+      });
+    }
 
-    return new Response(response.body, {
+    const contentType = response.headers.get("content-type") || "text/html";
+
+    // 🔥 IMPORTANTE: usar sendStream (mejor para Cloudflare)
+    return sendStream(event, response.body as any, {
       headers: {
         "Content-Type": contentType,
         "Access-Control-Allow-Origin": "*",
-      }
+      },
     });
 
-  } catch (err) {
+  } catch (err: any) {
     throw createError({
-      statusCode: 500,
-      message: "Error en proxy",
+      statusCode: err.statusCode || 500,
+      message: err.message || "Error en proxy",
     });
   }
 
