@@ -8,7 +8,7 @@ const envKey =
 
 if (!envKey || apiKey !== envKey) {
   throw createError({ statusCode: 401 });
-}
+};
 
   setHeader(event, "Access-Control-Allow-Origin", "*");
   setHeader(event, "Access-Control-Allow-Methods", "GET,OPTIONS");
