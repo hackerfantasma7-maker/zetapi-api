@@ -24,19 +24,24 @@ export default defineCachedEventHandler(async (event) => {
     }
   };
 
-  // 🔥 1. ANIMEFLV
+  const detectLang = (name: string) => {
+    const n = (name || "").toLowerCase();
+
+    if (n.includes("lat") || n.includes("cast") || n.includes("esp") || n.includes("dub")) {
+      return "latam";
+    }
+    if (n.includes("sub")) return "sub";
+
+    return "unknown";
+  };
+
   const base = await getEpisode(slug, Number(number)).catch(() => null);
 
-  // 🔥 2. MONOSCHINOS (REAL SCRAP)
   const monos = await (async () => {
     try {
-      const url = `https://monoschinos2.com/ver/${slug}-${number}`;
-      const html = await fetchHTML(url);
+      const html = await fetchHTML(`https://monoschinos2.com/ver/${slug}-${number}`);
       if (!html) return [];
-
-      const matches = [...html.matchAll(/iframe.*?src="(.*?)"/g)];
-
-      return matches.map((m) => ({
+      return [...html.matchAll(/iframe.*?src="(.*?)"/g)].map(m => ({
         name: "monoschinos",
         embed: m[1]
       }));
@@ -45,16 +50,11 @@ export default defineCachedEventHandler(async (event) => {
     }
   })();
 
-  // 🔥 3. GOGOANIME (REAL SCRAP)
   const gogo = await (async () => {
     try {
-      const url = `https://gogoanime3.co/${slug}-episode-${number}`;
-      const html = await fetchHTML(url);
+      const html = await fetchHTML(`https://gogoanime3.co/${slug}-episode-${number}`);
       if (!html) return [];
-
-      const matches = [...html.matchAll(/iframe.*?src="(.*?)"/g)];
-
-      return matches.map((m) => ({
+      return [...html.matchAll(/iframe.*?src="(.*?)"/g)].map(m => ({
         name: "gogoanime",
         embed: m[1]
       }));
@@ -63,15 +63,13 @@ export default defineCachedEventHandler(async (event) => {
     }
   })();
 
-  // 🔥 UNIFICAR SERVERS
   const allServers = [
     ...(base?.servers || []),
     ...monos,
     ...gogo
   ];
 
-  // 🔥 RESOLVER
-  const resolved = allServers.map((server: any) => {
+  let servers = allServers.map((server: any) => {
     const embed = server.embed || "";
     const download = server.download || "";
 
@@ -90,13 +88,18 @@ export default defineCachedEventHandler(async (event) => {
       name: server.name,
       type,
       stream,
-      embed
+      embed,
+      lang: detectLang(server.name)
     };
   });
 
-  // 🔥 LIMPIAR
+  servers = servers.filter(s => s.stream || s.embed);
+
+  const priority: any = { hls: 1, mp4: 2, embed: 3 };
+  servers.sort((a, b) => priority[a.type] - priority[b.type]);
+
   const unique = Array.from(
-    new Map(resolved.map((s) => [s.embed || s.stream, s])).values()
+    new Map(servers.map(s => [s.embed || s.stream, s])).values()
   );
 
   return {
