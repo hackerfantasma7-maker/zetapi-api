@@ -16,6 +16,7 @@ export async function getAllServers({
   title: string;
   lang: "sub" | "latino";
 }) {
+
   let servers: any[] = [];
 
   if (lang === "sub") {
@@ -35,6 +36,13 @@ export async function getAllServers({
 
     servers = [...lhd, ...mono];
   }
-//fix
-  return Array.from(new Map(servers.map(s => [s.embed, s])).values());
+
+  // 🔥 eliminar duplicados SIN romper
+  return Array.from(
+    new Map(
+      servers
+        .filter(s => s?.embed)
+        .map(s => [s.embed, s])
+    ).values()
+  );
 }
