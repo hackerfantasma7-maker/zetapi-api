@@ -8,6 +8,7 @@ export function detectServer(url: string): string {
   if (!url) return "unknown";
   const u = url.toLowerCase();
 
+  // Servidores comunes en Latino y Sub
   if (u.includes("streamwish") || u.includes("awish")) return "streamwish";
   if (u.includes("filemoon") || u.includes("fmoon")) return "filemoon";
   if (u.includes("voe.sx")) return "voe";
@@ -28,7 +29,8 @@ function isBadEmbed(url: string): boolean {
   return (
     u.startsWith("data:") || u.includes(".jpg") || u.includes(".png") ||
     u.includes(".gif") || u.includes("ads") || u.includes("doubleclick") ||
-    u.includes(".js") || u.includes(".css") || u.includes("track") || u.includes("google")
+    u.includes(".js") || u.includes(".css") || u.includes("track") || 
+    u.includes("google") || u.includes("banner")
   );
 }
 
@@ -44,6 +46,132 @@ export function cleanLinks(links: string[]) {
   return links
     .filter(l => !isBadEmbed(l) && isLikelyVideo(l))
     .map(l => ({
+      name: detectServer(l),
+      embed: l
+    }));
+}
+
+// Headers recomendados para evitar bloqueos en Cloudflare
+const myHeaders = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Accept-Language': 'es-ES,es;q=0.9',
+  'Referer': 'https://google.com'
+};
+
+// ==========================================
+// 🇯🇵 FUENTES: SUBTITULADO / JAPONÉS
+// ==========================================
+
+// AnimeFLV (Usa la librería externa)
+export async function getAnimeFLVServers(slug: string, number: number) {
+  try {
+    const res = await getEpisode(slug, number);
+    return (res?.servers || []).map((s: any) => ({
+      name: detectServer(s.url || s.embed),
+      embed: s.url || s.embed
+    }));
+  } catch { return []; }
+}
+
+// JKAnime (Validado: Status 200)
+export async function getJKAnimeServers(slug: string, number: number) {
+  try {
+    const html = await $fetch(`https://jkanime.net/${slug}/${number}/`, { headers: myHeaders });
+    const links = html.match(/https?:\/\/[^"]+/g) || [];
+    return cleanLinks(links);
+  } catch { return []; }
+}
+
+// Gogoanime (Mirror anitaku.to validado para saltar Cloudflare)
+export async function getGogoServers(query: string, number: number) {
+  try {
+    const html = await $fetch(`https://anitaku.to/${query}-episode-${number}`, { headers: myHeaders });
+    const links = html.match(/https?:\/\/[^"]+/g) || [];
+    return cleanLinks(links);
+  } catch { return []; }
+}
+
+// Hianime
+export async function getHiAnimeServers(query: string) {
+  try {
+    const html = await $fetch(`https://hianime.to/search?keyword=${query}`, { headers: myHeaders });
+    const links = html.match(/https?:\/\/[^"]+/g) || [];
+    return cleanLinks(links);
+  } catch { return []; }
+}
+
+// ==========================================
+// 🇲🇽 FUENTES: LATINO / SPANISH
+// ==========================================
+
+// TioAnime (Latino/Sub)
+export async function getTioAnimeServers(query: string, number: number) {
+  try {
+    const search = await $fetch(`https://tioanime.com/buscar?q=${query}`, { headers: myHeaders });
+    const match = search.match(/href="\/anime\/([^"]+)"/);
+    if (!match) return [];
+    const html = await $fetch(`https://tioanime.com/ver/${match[1]}-${number}`, { headers: myHeaders });
+    const iframe = html.match(/<iframe[^>]+src="([^"]+)"/);
+    return iframe ? [{ name: detectServer(iframe[1]), embed: iframe[1] }] : [];
+  } catch { return []; }
+}
+
+// MonosChinos (Validado: .net / Especializado en Latino)
+export async function getMonosChinosServers(query: string, number: number) {
+  try {
+    // Intentamos buscar la versión latina directamente
+    const search = await $fetch(`https://www.monoschinos2.net/search?q=${query}-latino`, { headers: myHeaders });
+    let match = search.match(/href="\/anime\/([^"]+latino[^"]*)"/i) || search.match(/href="\/anime\/([^"]+)"/);
+    if (!match) return [];
+
+    const html = await $fetch(`https://www.monoschinos2.net/ver/${match[1]}-episodio-${number}`, { headers: myHeaders });
+    const videoData = html.match(/var\s+videos\s*=\s*([^;]+)/);
+    if (videoData) {
+      return JSON.parse(videoData[1]).map((v: any) => ({
+        name: detectServer(v.url),
+        embed: v.url
+      }));
+    }
+    return [];
+  } catch { return []; }
+}
+
+// AnimeID
+export async function getAnimeIDServers(query: string, number: number) {
+  try {
+    const search = await $fetch(`https://www.animeid.tv/buscar?q=${query}`, { headers: myHeaders });
+    const match = search.match(/href="\/([^"]+)"/);
+    if (!match) return [];
+    const html = await $fetch(`https://www.animeid.tv/v/${match[1]}-${number}`, { headers: myHeaders });
+    const iframe = html.match(/<iframe[^>]+src="([^"]+)"/);
+    return iframe ? [{ name: detectServer(iframe[1]), embed: iframe[1] }] : [];
+  } catch { return []; }
+}
+
+// AnimeFenix
+export async function getAnimeFenixServers(query: string, number: number) {
+  try {
+    const search = await $fetch(`https://animefenix.tv/buscar?q=${query}`, { headers: myHeaders });
+    const match = search.match(/href="https:\/\/animefenix\.tv\/anime\/([^"]+)"/);
+    if (!match) return [];
+    const html = await $fetch(`https://animefenix.tv/ver/${match[1]}-${number}`, { headers: myHeaders });
+    const iframe = html.match(/<iframe[^>]+src="([^"]+)"/);
+    return iframe ? [{ name: detectServer(iframe[1]), embed: iframe[1] }] : [];
+  } catch { return []; }
+}
+
+// AnimeLHD
+export async function getAnimeLHDServers(query: string, number: number) {
+  try {
+    const searchUrl = `https://animelhd.com/?s=${encodeURIComponent(query + " latino")}`;
+    const html = await $fetch(searchUrl, { headers: myHeaders });
+    const match = html.match(/href="(https:\/\/animelhd\.com\/anime\/[^"]+)"/);
+    if (!match) return [];
+    const epHtml = await $fetch(`${match[1].replace(/\/$/, "")}-episodio-${number}`, { headers: myHeaders });
+    const links = epHtml.match(/https?:\/\/[^"]+/g) || [];
+    return cleanLinks(links);
+  } catch { return []; }
+}
       name: detectServer(l),
       embed: l
     }));
