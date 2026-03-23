@@ -1,8 +1,11 @@
-import { getAnimeInfo } from "animeflv-scraper";
-// Nota: Aquí deberías importar otros scrapers si decides usar fuentes diferentes para Latino
-// import { getAnimeInfoLatino } from "./tus-otros-scrapers"; 
+import { 
+  getAnimeFLVServers, 
+  getJKAnimeServers, 
+  getMonosChinosServers, 
+  getGogoServers 
+} from "../../utils/sources";
 
-export default defineCachedEventHandler(async (event) => {
+export default defineEventHandler(async (event) => {
   // 🔥 CORS FIX
   setHeader(event, "Access-Control-Allow-Origin", "*");
   setHeader(event, "Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -14,51 +17,53 @@ export default defineCachedEventHandler(async (event) => {
   const apiKey = getHeader(event, "x-api-key");
   const envKey = process.env.API_KEY || event.context.cloudflare?.env?.API_KEY;
 
-  if (!envKey || apiKey !== envKey) {
+  if (envKey && apiKey !== envKey) {
     throw createError({ statusCode: 401, statusMessage: "No autorizado" });
   }
 
   // 📂 OBTENER PARÁMETROS
   const { slug } = getRouterParams(event);
   const query = getQuery(event);
-  const lang = query.lang || 'sub'; // Por defecto es subtitulado (AnimeFLV)
+  
+  // Extraemos el número de episodio y el idioma (por defecto 'sub')
+  const number = Number(query.number) || 1;
+  const lang = query.lang || 'sub'; 
 
-  let data = null;
+  let servers = [];
 
   try {
-    // 🔍 LÓGICA DE SELECCIÓN POR IDIOMA
-    if (lang === 'spanish') {
-      // Aquí podrías cambiar la lógica si tienes una fuente de doblaje
-      // Por ahora, intentamos buscar con el slug asumiendo que la fuente lo soporta
-      data = await getAnimeInfo(slug).catch(() => null); 
+    // 🔍 LÓGICA DE SELECCIÓN DE FUENTE POR IDIOMA
+    if (lang === 'latino' || lang === 'spanish') {
+      // Fuente validada en el test: MonosChinos
+      servers = await getMonosChinosServers(slug, number);
     } 
-    else if (lang === 'japanese') {
-      // Lógica para versión original (puedes filtrar por tags si el scraper lo permite)
-      data = await getAnimeInfo(slug).catch(() => null);
+    else if (lang === 'jp' || lang === 'japanese') {
+      // Fuente validada en el test: GogoAnime (Anitaku)
+      servers = await getGogoServers(slug, number);
     } 
     else {
-      // Por defecto: Subtitulado (AnimeFLV)
-      data = await getAnimeInfo(slug).catch(() => null);
-    }
-
-    if (!data) {
-      throw createError({ statusCode: 404, statusMessage: "Anime no encontrado" });
+      // Por defecto: Subtitulado (JKAnime o AnimeFLV)
+      // Intentamos primero con JKAnime que es más ligero para Cloudflare
+      servers = await getJKAnimeServers(slug, number);
+      
+      // Si JK no devuelve nada, intentamos con AnimeFLV (opcional)
+      if (servers.length === 0) {
+        servers = await getAnimeFLVServers(slug, number);
+      }
     }
 
     return {
       success: true,
+      slug,
+      episode: number,
       language: lang,
-      data
+      servers: servers
     };
 
   } catch (error) {
-    throw createError({ statusCode: 500, statusMessage: "Error al obtener info" });
+    throw createError({ 
+      statusCode: 500, 
+      statusMessage: "Error al obtener servidores de video" 
+    });
   }
-}, {
-  // Configuración de caché opcional (para que no sature la fuente)
-  maxAge: 60 * 60 // 1 hora
 });
-    data
-  };
-});
-//nuevo
