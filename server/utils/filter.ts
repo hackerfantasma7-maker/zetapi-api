@@ -1,15 +1,4 @@
 export async function filterWorkingServers(servers: any[]) {
-  const results = await Promise.all(
-    servers.map(async (s) => {
-      try {
-        await fetch(s.embed, { method: "GET" });
-        return s;
-      } catch {
-        return null;
-      }
-    })
-  );
-
-  return results.filter(Boolean);
+  // 🔥 NO validar con fetch directo (rompe embeds)
+  return servers.filter(s => s.embed && s.embed.startsWith("http"));
 }
-//fixxx
