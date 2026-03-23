@@ -1,39 +1,59 @@
-import { getEpisode } from "animeflv-scraper";
+// 🔥 MONOSCHINOS (Mejorado para Latino)
+export async function getMonosChinosServers(query: string, number: number) {
+  try {
+    // Buscamos específicamente con la palabra "latino" en la web
+    const search = await $fetch(`https://monoschinos2.com/search/${query}-latino`);
+    
+    // Intentamos capturar el slug que contenga "latino"
+    let match = search.match(/href="\/anime\/([^"]+latino[^"]*)"/i);
+    
+    // Si no encuentra nada con "latino", buscamos el normal como fallback
+    if (!match) match = search.match(/href="\/anime\/([^"]+)"/);
+    if (!match) return [];
 
-// =====================
-// 🔥 DETECTOR SERVERS
-// =====================
-function detectServer(url: string) {
-  if (!url) return "unknown";
+    const slug = match[1];
+    // Nota: Monoschinos a veces usa /ver/slug-episodio-number
+    const epUrl = `https://monoschinos2.com/ver/${slug}-episodio-${number}`;
+    const html = await $fetch(epUrl);
 
-  const u = url.toLowerCase();
+    // Buscamos todos los scripts de video (usualmente están en un JSON interno)
+    const videoData = html.match(/var\s+videos\s*=\s*([^;]+)/);
+    if (videoData) {
+       const parsed = JSON.parse(videoData[1]);
+       return parsed.map((v: any) => ({
+         name: detectServer(v.url),
+         embed: v.url
+       }));
+    }
 
-  if (u.includes("streamwish")) return "streamwish";
-  if (u.includes("filemoon")) return "filemoon";
-  if (u.includes("streamtape")) return "streamtape";
-  if (u.includes("mp4upload")) return "mp4upload";
-  if (u.includes("dood")) return "doodstream";
-  if (u.includes("ok.ru")) return "okru";
-
-  return "external";
+    return [];
+  } catch {
+    return [];
+  }
 }
 
-// =====================
-// 🔥 FILTROS
-// =====================
-function isBadEmbed(url: string) {
-  if (!url) return true;
+// 🔥 ANIMELHD (Específico para Latino)
+export async function getAnimeLHDServers(query: string, number: number) {
+  try {
+    // AnimeLHD es casi todo latino, pero aseguramos la búsqueda
+    const searchUrl = `https://animelhd.com/?s=${encodeURIComponent(query + " latino")}`;
+    const html = await $fetch(searchUrl);
+    
+    // Buscamos el link del post
+    const match = html.match(/href="(https:\/\/animelhd\.com\/anime\/[^"]+)"/);
+    if (!match) return [];
 
-  const u = url.toLowerCase();
+    const animeUrl = match[1];
+    // Generamos la URL del episodio (ajusta según la estructura de la web)
+    const epUrl = `${animeUrl.replace(/\/$/, "")}-episodio-${number}`;
+    const epHtml = await $fetch(epUrl);
 
-  return (
-    u.startsWith("data:") ||
-    u.includes(".jpg") ||
-    u.includes(".png") ||
-    u.includes(".gif") ||
-    u.includes("logo") ||
-    u.includes("banner") ||
-    u.includes("ads") ||
+    const links = epHtml.match(/https?:\/\/[^"]+/g) || [];
+    return cleanLinks(links);
+  } catch {
+    return [];
+  }
+}
     u.includes("doubleclick") ||
     u.includes(".css") ||
     u.includes(".js") ||
