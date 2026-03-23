@@ -1,29 +1,20 @@
 import { searchAnime, getAnimeInfo } from "animeflv-scraper";
 
 export default defineEventHandler(async (event) => {
-
-  // 🌐 CORS (PRIMERO)
   setHeader(event, "Access-Control-Allow-Origin", "*");
-  setHeader(event, "Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  setHeader(event, "Access-Control-Allow-Methods", "GET,OPTIONS");
   setHeader(event, "Access-Control-Allow-Headers", "Content-Type, x-api-key");
 
-  // 🔥 PREFLIGHT (ESTO ES LO QUE PREGUNTAS)
-  if (event.method === "OPTIONS") {
-    setResponseStatus(event, 200);
-    return "";
-  }
+  if (event.method === "OPTIONS") return "";
 
-  // 🔐 API KEY (DESPUÉS)
   const apiKey = getHeader(event, "x-api-key");
-  const envKey =
-    process.env.API_KEY ||
-    event.context.cloudflare?.env?.API_KEY;
+  const envKey = process.env.API_KEY || event.context.cloudflare?.env?.API_KEY;
 
   if (!envKey || apiKey !== envKey) {
     throw createError({ statusCode: 401 });
   }
 
-const { id } = getRouterParams(event) as { id: string };
+  const { id } = getRouterParams(event) as { id: string };
 
   const anilist = await $fetch<any>("https://graphql.anilist.co", {
     method: "POST",
@@ -80,13 +71,11 @@ const { id } = getRouterParams(event) as { id: string };
   return {
     success: true,
     data: {
-      resolvedSlug: best.slug,
+      slug: best.slug,
       title: info?.title,
+      synopsis: info?.synopsis,
       cover: info?.cover,
       episodes: info?.episodes || []
     }
   };
 });
-
-
-
