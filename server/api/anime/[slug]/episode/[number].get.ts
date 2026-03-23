@@ -2,7 +2,6 @@ import { getAllServers } from "../../../../utils/getServers";
 import { filterWorkingServers } from "../../../../utils/filter";
 
 export default defineEventHandler(async (event) => {
-
   // 🔥 CORS FIX
   setHeader(event, "Access-Control-Allow-Origin", "*");
   setHeader(event, "Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -15,13 +14,13 @@ export default defineEventHandler(async (event) => {
   const { lang } = getQuery(event) as { lang?: string };
 
   /**
-   * 🌐 LÓGICA DE IDIOMAS EXPANDIDA
+   * 🌐 LÓGICA DE IDIOMAS
    * Soportamos: 
-   * - 'latino' o 'spanish' (Doblaje)
-   * - 'sub' (Subtitulado al español)
-   * - 'jp' o 'japanese' (Audio original japonés)
+   * - 'latino' o 'spanish'
+   * - 'sub' (Subtitulado)
+   * - 'jp' o 'japanese'
    */
-  let language = "sub"; // Idioma por defecto
+  let language = "sub"; 
   
   if (lang === "latino" || lang === "spanish") {
     language = "latino";
@@ -33,15 +32,15 @@ export default defineEventHandler(async (event) => {
   const title = slug.replace(/-/g, " ");
 
   try {
-    // 🚀 Buscamos los servidores pasando el nuevo idioma validado
+    // 🚀 Buscamos los servidores pasando el idioma validado
     const servers = await getAllServers({
       slug,
       number: Number(number),
       title,
-      lang: language // Se envía 'latino', 'sub' o 'jp'
+      lang: language 
     });
 
-    // 🛡️ Filtramos solo los servidores que están funcionando (200 OK)
+    // 🛡️ Filtramos solo los servidores que están funcionando
     const working = await filterWorkingServers(servers);
 
     return {
@@ -58,15 +57,10 @@ export default defineEventHandler(async (event) => {
     };
 
   } catch (error) {
+    console.error("Error en API Episode:", error);
     throw createError({
       statusCode: 500,
       statusMessage: "Error al obtener los servidores de video"
     });
   }
 });
-      number: Number(number),
-      servers: working
-    }
-  };
-});
-//nuevo
