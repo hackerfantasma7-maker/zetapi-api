@@ -173,3 +173,36 @@ export async function getAnimeIDServers(query: string) {
     return [];
   }
 }
+
+export async function getTioAnimeServers(query: string, number: number) {
+  try {
+    // 🔍 buscar anime
+    const search = await $fetch(`https://tioanime.com/buscar?q=${query}`);
+
+    const match = search.match(/href="\/anime\/([^"]+)"/);
+
+    if (!match) return [];
+
+    const slug = match[1];
+
+    // 🎬 ir al episodio
+    const epUrl = `https://tioanime.com/ver/${slug}-${number}`;
+
+    const html = await $fetch(epUrl);
+
+    // 🔥 SOLO iframe real
+    const iframeMatch = html.match(/<iframe[^>]+src="([^"]+)"/);
+
+    if (!iframeMatch) return [];
+
+    const embed = iframeMatch[1];
+
+    return [{
+      name: detectServer(embed),
+      embed
+    }];
+
+  } catch {
+    return [];
+  }
+}
