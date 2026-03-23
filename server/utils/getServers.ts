@@ -25,9 +25,19 @@ function generateVariants(title: string) {
 
 // prioridad
 function sortServers(servers: any[]) {
-  const priority = ["streamwish", "filemoon", "streamtape"];
-
   return servers.sort((a, b) => {
+
+    // 🥇 PRIORIDAD ABSOLUTA: JKANIME limpio
+    if (a.embed?.includes("jkanime")) return -1;
+    if (b.embed?.includes("jkanime")) return 1;
+
+    // 🥈 STREAMWISH
+    if (a.name === "streamwish") return -1;
+    if (b.name === "streamwish") return 1;
+
+    // 🥉 OTROS BUENOS
+    const priority = ["filemoon", "streamtape"];
+
     return priority.indexOf(a.name) - priority.indexOf(b.name);
   });
 }
