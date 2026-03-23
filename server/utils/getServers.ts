@@ -35,7 +35,6 @@ export async function getAllServers({
 
     servers = [...lhd, ...mono];
   }
-
-  // quitar duplicados
+//fix
   return Array.from(new Map(servers.map(s => [s.embed, s])).values());
 }
