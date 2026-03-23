@@ -1,9 +1,4 @@
-import { 
-  getAnimeFLVServers, 
-  getJKAnimeServers, 
-  getMonosChinosServers, 
-  getGogoServers 
-} from "../../utils/sources";
+
 
 export default defineEventHandler(async (event) => {
   // 🔥 CORS FIX
