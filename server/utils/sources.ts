@@ -1,42 +1,32 @@
 import { getEpisode } from "animeflv-scraper";
 
-// 🔹 FILTRO SUAVE (NO ROMPE)
-function cleanLinks(links: string[]) {
-  return links.filter(link => {
-    // ❌ eliminar basura clara
-    if (link.includes(".css")) return false;
-    if (link.includes(".js")) return false;
-    if (link.includes(".svg")) return false;
-    if (link.includes(".png")) return false;
-    if (link.includes(".jpg")) return false;
-    if (link.includes("schema.org")) return false;
-    if (link.includes("w3.org")) return false;
-    if (link.includes(".dtd")) return false; // 🔥 este era tu bug
-
-    return link.startsWith("http");
-  });
+// 🔹 VALIDADOR DE EMBEDS (CLAVE)
+function isValidVideoUrl(url: string) {
+  return /streamtape|filemoon|mp4upload|dood|okru|streamwish|yourupload/i.test(url);
 }
 
-// 🔹 DETECTAR NOMBRE SIN ROMPER
-function detectServerName(url: string) {
+// 🔹 EXTRAER NOMBRE REAL DEL SERVER
+function getServerName(url: string) {
   if (url.includes("streamtape")) return "streamtape";
   if (url.includes("filemoon")) return "filemoon";
   if (url.includes("mp4upload")) return "mp4upload";
   if (url.includes("dood")) return "dood";
   if (url.includes("okru")) return "okru";
-  if (url.includes("yourupload")) return "yourupload";
-  return "external"; // fallback
+  if (url.includes("streamwish")) return "streamwish";
+  return "external";
 }
 
-// 🔹 ANIMEFLV
+// 🔹 ANIMEFLV (BIEN)
 export async function getAnimeFLVServers(slug: string, number: number) {
   try {
     const res = await getEpisode(slug, number);
 
-    return (res?.servers || []).map((s: any) => ({
-      name: detectServerName(s.url || s.embed),
-      embed: s.url || s.embed
-    }));
+    return (res?.servers || [])
+      .filter((s: any) => isValidVideoUrl(s.url || s.embed))
+      .map((s: any) => ({
+        name: getServerName(s.url || s.embed),
+        embed: s.url || s.embed
+      }));
   } catch {
     return [];
   }
@@ -50,46 +40,46 @@ export async function getJKAnimeServers(slug: string, number: number) {
 
     const matches = html.match(/https?:\/\/[^"]+/g) || [];
 
-    const clean = cleanLinks(matches);
-
-    return clean.map((link: string) => ({
-      name: detectServerName(link),
-      embed: link
-    }));
+    return matches
+      .filter(isValidVideoUrl) // 🔥 FILTRO CLAVE
+      .map((link: string) => ({
+        name: getServerName(link),
+        embed: link
+      }));
   } catch {
     return [];
   }
 }
 
-// 🔹 ANIMELHD
+// 🔹 ANIMELHD (FIX)
 export async function getAnimeLHDServers(query: string) {
   try {
     const html = await $fetch(`https://animelhd.com/?s=${encodeURIComponent(query)}`);
     const links = html.match(/https?:\/\/[^"]+/g) || [];
 
-    const clean = cleanLinks(links);
-
-    return clean.map((link: string) => ({
-      name: detectServerName(link),
-      embed: link
-    }));
+    return links
+      .filter(isValidVideoUrl)
+      .map((link: string) => ({
+        name: getServerName(link),
+        embed: link
+      }));
   } catch {
     return [];
   }
 }
 
-// 🔹 MONOSCHINOS
+// 🔹 MONOSCHINOS (FIX)
 export async function getMonosChinosServers(query: string) {
   try {
     const html = await $fetch(`https://monoschinos2.com/search/${query}`);
     const links = html.match(/https?:\/\/[^"]+/g) || [];
 
-    const clean = cleanLinks(links);
-
-    return clean.map((link: string) => ({
-      name: detectServerName(link),
-      embed: link
-    }));
+    return links
+      .filter(isValidVideoUrl)
+      .map((link: string) => ({
+        name: getServerName(link),
+        embed: link
+      }));
   } catch {
     return [];
   }
