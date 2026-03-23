@@ -35,6 +35,12 @@ export async function getAllServers({
 
     servers = [...lhd, ...mono];
   }
-//fix
+  
+  const proxyBase = "/api/proxy?url=";
+
+servers = servers.map(s => ({
+  ...s,
+  embed: `${proxyBase}${encodeURIComponent(s.embed)}`
+}));
   return Array.from(new Map(servers.map(s => [s.embed, s])).values());
 }
