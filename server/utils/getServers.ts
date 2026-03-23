@@ -10,7 +10,9 @@ import {
   getAnimeIDServers
 } from "./sources";
 
-// variantes
+// =====================
+// 🔥 VARIANTES
+// =====================
 function generateVariants(title: string) {
   const base = title.toLowerCase();
 
@@ -19,15 +21,19 @@ function generateVariants(title: string) {
     base.replace(/ /g, "-"),
     base.replace(/ /g, "_"),
     base.replace("season", ""),
+    base.replace("segunda temporada", ""),
+    base.replace("2nd season", ""),
     base.replace(/\d+/g, "")
   ];
 }
 
-// prioridad
+// =====================
+// 🔥 PRIORIDAD
+// =====================
 function sortServers(servers: any[]) {
   return servers.sort((a, b) => {
 
-    // 🥇 PRIORIDAD ABSOLUTA: JKANIME limpio
+    // 🥇 JKANIME
     if (a.embed?.includes("jkanime")) return -1;
     if (b.embed?.includes("jkanime")) return 1;
 
@@ -35,13 +41,16 @@ function sortServers(servers: any[]) {
     if (a.name === "streamwish") return -1;
     if (b.name === "streamwish") return 1;
 
-    // 🥉 OTROS BUENOS
+    // 🥉 OTROS
     const priority = ["filemoon", "streamtape"];
 
     return priority.indexOf(a.name) - priority.indexOf(b.name);
   });
 }
 
+// =====================
+// 🔥 MAIN
+// =====================
 export async function getAllServers({
   slug,
   number,
@@ -63,15 +72,17 @@ export async function getAllServers({
 
     servers.push(...core.flat());
 
-    if (!servers.length) {
+    if (servers.length < 3) {
       for (const v of variants) {
         const fallback = await Promise.all([
           getGogoServers(v),
           getHiAnimeServers(v),
-          getAnimeFenixServers(v)
+          getAnimeFenixServers(v, number)
         ]);
 
         servers.push(...fallback.flat());
+
+        if (servers.length > 6) break;
       }
     }
   }
@@ -79,32 +90,43 @@ export async function getAllServers({
   // =====================
   // 🔥 LATINO
   // =====================
- // =====================
-// 🔥 LATINO FULL (ROBUSTO)
-// =====================
-if (lang === "latino") {
+  if (lang === "latino") {
 
-  // 🔥 CORE
-  const core = await Promise.all([
-    getTioAnimeServers(title, number),
-    getAnimeIDServers(title, number)
-  ]);
+    const core = await Promise.all([
+      getTioAnimeServers(title, number),
+      getAnimeIDServers(title, number)
+    ]);
 
-  servers.push(...core.flat());
+    servers.push(...core.flat());
 
-  // 🔥 SI HAY POCOS → MÁS FUENTES
-  if (servers.length < 3) {
-    for (const v of variants) {
-      const fallback = await Promise.all([
-        getAnimeFenixServers(v, number),
-        getMonosChinosServers(v, number),
-        getAnimeLHDServers(v, number)
-      ]);
+    if (servers.length < 3) {
+      for (const v of variants) {
+        const fallback = await Promise.all([
+          getAnimeFenixServers(v, number),
+          getMonosChinosServers(v, number),
+          getAnimeLHDServers(v, number)
+        ]);
 
-      servers.push(...fallback.flat());
+        servers.push(...fallback.flat());
 
-      if (servers.length > 6) break; // 🔥 evita spam
+        if (servers.length > 6) break;
+      }
     }
   }
+
+  // =====================
+  // 🔥 LIMPIAR DUPLICADOS
+  // =====================
+  const unique = Array.from(
+    new Map(
+      servers
+        .filter(s => s?.embed)
+        .map(s => [s.embed, s])
+    ).values()
+  );
+
+  // =====================
+  // 🔥 RETURN FINAL
+  // =====================
+  return sortServers(unique);
 }
-//siff
