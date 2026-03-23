@@ -1,46 +1,17 @@
-import {
-  getAnimeFLVServers,
-  getJKAnimeServers,
-  getAnimeLHDServers,
-  getMonosChinosServers
-} from "./sources";
-
-export async function getAllServers({
-  slug,
-  number,
-  title,
-  lang
-}: {
-  slug: string;
-  number: number;
-  title: string;
-  lang: "sub" | "latino";
-}) {
-  let servers: any[] = [];
-
-  if (lang === "sub") {
-    const [flv, jk] = await Promise.all([
-      getAnimeFLVServers(slug, number),
-      getJKAnimeServers(slug, number)
-    ]);
-
-    servers = [...flv, ...jk];
-  }
-
-  if (lang === "latino") {
-    const [lhd, mono] = await Promise.all([
-      getAnimeLHDServers(title),
-      getMonosChinosServers(title)
-    ]);
-
-    servers = [...lhd, ...mono];
-  }
-  
-  const proxyBase = "/api/proxy?url=";
+// 🔥 SOLO proxear si es necesario
+function needsProxy(url: string) {
+  return (
+    url.includes("jkanime") ||
+    url.includes("animelhd") ||
+    url.includes("monoschinos")
+  );
+}
 
 servers = servers.map(s => ({
   ...s,
-  embed: `${proxyBase}${encodeURIComponent(s.embed)}`
+  embed: needsProxy(s.embed)
+    ? `/api/proxy?url=${encodeURIComponent(s.embed)}`
+    : s.embed
 }));
-  return Array.from(new Map(servers.map(s => [s.embed, s])).values());
-}
+
+return Array.from(new Map(servers.map(s => [s.embed, s])).values());
