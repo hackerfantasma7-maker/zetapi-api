@@ -1,5 +1,5 @@
-import { getAllServers } from "~/server/utils/getServers";
-import { filterWorkingServers } from "~/server/utils/filter";
+import { getAllServers } from "../../../../utils/getServers";
+import { filterWorkingServers } from "../../../../utils/filter";
 
 export default defineEventHandler(async (event) => {
 
