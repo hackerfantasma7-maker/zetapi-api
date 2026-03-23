@@ -60,3 +60,4 @@ export default defineEventHandler(async (event) => {
     data: search
   };
 });
+//fix
