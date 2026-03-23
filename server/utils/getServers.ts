@@ -1,12 +1,12 @@
 import { getEpisode } from "animeflv-scraper";
 
-// =====================
-// 🛠️ UTILIDADES DE FILTRADO Y DETECCIÓN
-// =====================
+// ==========================================
+// 🛠️ UTILIDADES DE DETECCIÓN Y LIMPIEZA
+// ==========================================
+
 function detectServer(url: string): string {
   if (!url) return "unknown";
   const u = url.toLowerCase();
-
   if (u.includes("streamwish") || u.includes("awish")) return "streamwish";
   if (u.includes("filemoon") || u.includes("fmoon")) return "filemoon";
   if (u.includes("streamtape")) return "streamtape";
@@ -17,7 +17,6 @@ function detectServer(url: string): string {
   if (u.includes("yourupload")) return "yourupload";
   if (u.includes("mixdrop")) return "mixdrop";
   if (u.includes("reproductor") || u.includes("sfast")) return "faststream";
-
   return "external";
 }
 
@@ -45,16 +44,27 @@ function generateVariants(title: string) {
   return [
     base,
     base.replace(/ /g, "-"),
-    base.replace(/ /g, "_"),
     `${base}-latino`,
     base.replace("season", ""),
-    base.replace(/\d+/g, "")
   ];
 }
 
-// =====================
-// 🇯🇵 FUENTES JAPONÉS / SUB (AnimeFLV, JK, Gogo)
-// =====================
+function sortServers(servers: any[]) {
+  return servers.sort((a, b) => {
+    // 🥇 Prioridad 1: JKAnime
+    if (a.embed?.includes("jkanime")) return -1;
+    if (b.embed?.includes("jkanime")) return 1;
+    // 🥈 Prioridad 2: Streamwish
+    if (a.name === "streamwish") return -1;
+    if (b.name === "streamwish") return 1;
+    return 0;
+  });
+}
+
+// ==========================================
+// 🇯🇵 FUENTES: SUBTITULADO / JAPONÉS
+// ==========================================
+
 export async function getAnimeFLVServers(slug: string, number: number) {
   try {
     const res = await getEpisode(slug, number);
@@ -67,7 +77,7 @@ export async function getAnimeFLVServers(slug: string, number: number) {
 
 export async function getJKAnimeServers(slug: string, number: number) {
   try {
-    const html = await $fetch(`https://jkanime.net/${slug}/${number}/`);
+    const html: string = await $fetch(`https://jkanime.net/${slug}/${number}/`);
     const links = html.match(/https?:\/\/[^"]+/g) || [];
     return cleanLinks(links);
   } catch { return []; }
@@ -75,66 +85,64 @@ export async function getJKAnimeServers(slug: string, number: number) {
 
 export async function getGogoServers(slug: string, number: number) {
   try {
-    const html = await $fetch(`https://gogoanime.pe/search.html?keyword=${slug}`);
+    const html: string = await $fetch(`https://gogoanime3.co/search.html?keyword=${slug}`);
     const links = html.match(/https?:\/\/[^"]+/g) || [];
     return cleanLinks(links);
   } catch { return []; }
 }
 
-// =====================
-// 🇲🇽 FUENTES LATINO (TioAnime, MonosChinos, LHD)
-// =====================
-export async function getTioAnimeServers(query: string, number: number) {
-  try {
-    const search = await $fetch(`https://tioanime.com/buscar?q=${query}`);
-    const match = search.match(/href="\/anime\/([^"]+)"/);
-    if (!match) return [];
-    const html = await $fetch(`https://tioanime.com/ver/${match[1]}-${number}`);
-    const iframe = html.match(/<iframe[^>]+src="([^"]+)"/);
-    return iframe ? [{ name: detectServer(iframe[1]), embed: iframe[1] }] : [];
-  } catch { return []; }
-}
+// ==========================================
+// 🇲🇽 FUENTES: LATINO
+// ==========================================
 
 export async function getMonosChinosServers(query: string, number: number) {
   try {
-    const search = await $fetch(`https://monoschinos2.com/search/${query}-latino`);
-    let match = search.match(/href="\/anime\/([^"]+latino[^"]*)"/i) || search.match(/href="\/anime\/([^"]+)"/);
+    const search: string = await $fetch(`https://monoschinos2.com/search?q=${query}`);
+    const match = search.match(/href="\/anime\/([^"]+)"/);
     if (!match) return [];
-    const html = await $fetch(`https://monoschinos2.com/ver/${match[1]}-episodio-${number}`);
+    const html: string = await $fetch(`https://monoschinos2.com/ver/${match[1]}-episodio-${number}`);
     const videoData = html.match(/var\s+videos\s*=\s*([^;]+)/);
-    if (videoData) {
-      return JSON.parse(videoData[1]).map((v: any) => ({ name: detectServer(v.url), embed: v.url }));
-    }
-    return [];
+    return videoData ? JSON.parse(videoData[1]).map((v: any) => ({ name: detectServer(v.url), embed: v.url })) : [];
   } catch { return []; }
 }
 
-// =====================
-// 🚀 FUNCIÓN PRINCIPAL ORQUESTADORA
-// =====================
+export async function getTioAnimeServers(query: string, number: number) {
+  try {
+    const search: string = await $fetch(`https://tioanime.com/buscar?q=${query}`);
+    const match = search.match(/href="\/anime\/([^"]+)"/);
+    if (!match) return [];
+    const html: string = await $fetch(`https://tioanime.com/ver/${match[1]}-${number}`);
+    const links = html.match(/https?:\/\/[^"]+/g) || [];
+    return cleanLinks(links);
+  } catch { return []; }
+}
+
+// ==========================================
+// 🚀 ORQUESTADOR ÚNICO (getAllServers)
+// ==========================================
+
 export async function getAllServers({ slug, number, title, lang }: any) {
   let servers: any[] = [];
-  const variants = generateVariants(title);
+  const variants = generateVariants(title || slug);
 
-  // 1. Lógica para SUBTITULADO
+  // 1. LÓGICA SUBTITULADO
   if (lang === "sub") {
-    const core = await Promise.all([
+    const results = await Promise.all([
       getAnimeFLVServers(slug, number),
-      getJKAnimeServers(slug, number),
-      getTioAnimeServers(title, number)
+      getJKAnimeServers(slug, number)
     ]);
-    servers.push(...core.flat());
-  }
-
-  // 2. Lógica para LATINO / SPANISH
+    servers.push(...results.flat());
+  } 
+  
+  // 2. LÓGICA LATINO
   else if (lang === "latino" || lang === "spanish") {
-    const core = await Promise.all([
-      getMonosChinosServers(title, number),
-      getTioAnimeServers(`${title} latino`, number)
+    const results = await Promise.all([
+      getMonosChinosServers(title || slug, number),
+      getTioAnimeServers(`${title || slug} latino`, number)
     ]);
-    servers.push(...core.flat());
-    
-    // Fallback con variantes si no hay servidores
+    servers.push(...results.flat());
+
+    // Fallback con variantes si no hay resultados
     if (servers.length < 2) {
       for (const v of variants) {
         const fb = await getMonosChinosServers(v, number);
@@ -143,173 +151,15 @@ export async function getAllServers({ slug, number, title, lang }: any) {
     }
   }
 
-  // 3. Lógica para JAPONÉS (Raw/Global)
+  // 3. LÓGICA JAPONÉS / GLOBAL
   else if (lang === "jp" || lang === "japanese") {
-    const core = await getGogoServers(slug, number);
-    servers.push(...core);
+    servers = await getGogoServers(slug, number);
   }
 
-  // Limpiar duplicados por URL de embed
+  // 🔥 Limpiar duplicados por URL y ordenar
   const unique = Array.from(
     new Map(servers.filter(s => s?.embed).map(s => [s.embed, s])).values()
   );
 
-  // Ordenar por prioridad (JKAnime y Streamwish primero)
-  return unique.sort((a, b) => {
-    if (a.embed.includes("jkanime")) return -1;
-    if (a.name === "streamwish") return -1;
-    return 0;
-  });
-}
-  }
-
-  // =====================
-  // 2️⃣ LATINO / SPANISH
-  // =====================
-  if (lang === "latino" || lang === "spanish") {
-    // Priorizamos fuentes que se especializan en Doblaje
-    const core = await Promise.all([
-      getAnimeLHDServers(slug, number), // Muy bueno para Latino
-      getMonosChinosServers(slug, number)
-    ]);
-
-    servers.push(...core.flat());
-
-    // Fallback para latino usando variantes
-    if (servers.length < 2) {
-      for (const v of variants) {
-        const fallback = await Promise.all([
-          getAnimeFenixServers(v, number), // Fenix a veces tiene opción doblada
-          getAnimeIDServers(v, number)
-        ]);
-        servers.push(...fallback.flat());
-        if (servers.length > 4) break;
-      }
-    }
-  }
-
-  // =====================
-  // 3️⃣ JAPONÉS (Audio Original / Global)
-  // =====================
-  if (lang === "jp" || lang === "japanese") {
-    // Usamos fuentes globales que suelen tener el audio original más limpio
-    const core = await Promise.all([
-      getGogoServers(slug, number),
-      getHiAnimeServers(slug, number)
-    ]);
-
-    servers.push(...core.flat());
-  }
-
-  // =====================
-  // 🔥 LIMPIAR DUPLICADOS Y FILTRAR
-  // =====================
-  const unique = Array.from(
-    new Map(
-      servers
-        .filter(s => s?.embed && s.embed.trim() !== "") // Evita embeds vacíos
-        .map(s => [s.embed, s])
-    ).values()
-  );
-
-  // =====================
-  // 🔥 ORDENAR Y RETORNAR
-  // =====================
-  return sortServers(unique);
-}
-    if (a.embed?.includes("jkanime")) return -1;
-    if (b.embed?.includes("jkanime")) return 1;
-
-    // 🥈 STREAMWISH
-    if (a.name === "streamwish") return -1;
-    if (b.name === "streamwish") return 1;
-
-    // 🥉 OTROS
-    const priority = ["filemoon", "streamtape"];
-
-    return priority.indexOf(a.name) - priority.indexOf(b.name);
-  });
-}
-
-// =====================
-// 🔥 MAIN
-// =====================
-export async function getAllServers({
-  slug,
-  number,
-  title,
-  lang
-}: any) {
-
-  let servers: any[] = [];
-  const variants = generateVariants(title);
-
-  // =====================
-  // 🔥 JAPONES
-  // =====================
-  if (lang === "sub") {
-    const core = await Promise.all([
-      getAnimeFLVServers(slug, number),
-      getJKAnimeServers(slug, number)
-    ]);
-
-    servers.push(...core.flat());
-
-    if (servers.length < 3) {
-      for (const v of variants) {
-        const fallback = await Promise.all([
-          getGogoServers(v),
-          getHiAnimeServers(v),
-          getAnimeFenixServers(v, number)
-        ]);
-
-        servers.push(...fallback.flat());
-
-        if (servers.length > 6) break;
-      }
-    }
-  }
-
-  // =====================
-  // 🔥 LATINO
-  // =====================
-  if (lang === "latino") {
-
-    const core = await Promise.all([
-      getTioAnimeServers(title, number),
-      getAnimeIDServers(title, number)
-    ]);
-
-    servers.push(...core.flat());
-
-    if (servers.length < 3) {
-      for (const v of variants) {
-        const fallback = await Promise.all([
-          getAnimeFenixServers(v, number),
-          getMonosChinosServers(v, number),
-          getAnimeLHDServers(v, number)
-        ]);
-
-        servers.push(...fallback.flat());
-
-        if (servers.length > 6) break;
-      }
-    }
-  }
-
-  // =====================
-  // 🔥 LIMPIAR DUPLICADOS
-  // =====================
-  const unique = Array.from(
-    new Map(
-      servers
-        .filter(s => s?.embed)
-        .map(s => [s.embed, s])
-    ).values()
-  );
-
-  // =====================
-  // 🔥 RETURN FINAL
-  // =====================
   return sortServers(unique);
 }
