@@ -1,39 +1,95 @@
-import {
-  getAnimeFLVServers,
-  getJKAnimeServers,
-  getGogoServers,
-  getHiAnimeServers,
-  getAnimeFenixServers,
-  getAnimeLHDServers,
-  getMonosChinosServers,
-  getTioAnimeServers,
-  getAnimeIDServers
-} from "./sources";
-
 // =====================
-// 🔥 VARIANTES
+// 🔥 MAIN CON 3 IDIOMAS
 // =====================
-function generateVariants(title: string) {
-  const base = title.toLowerCase();
+export async function getAllServers({
+  slug,
+  number,
+  title,
+  lang
+}: any) {
 
-  return [
-    base,
-    base.replace(/ /g, "-"),
-    base.replace(/ /g, "_"),
-    base.replace("season", ""),
-    base.replace("segunda temporada", ""),
-    base.replace("2nd season", ""),
-    base.replace(/\d+/g, "")
-  ];
+  let servers: any[] = [];
+  const variants = generateVariants(title);
+
+  // =====================
+  // 1️⃣ SUBTITULADO (Standard)
+  // =====================
+  if (lang === "sub") {
+    const core = await Promise.all([
+      getAnimeFLVServers(slug, number),
+      getJKAnimeServers(slug, number),
+      getTioAnimeServers(title, number) // TioAnime suele ser muy estable en subs
+    ]);
+
+    servers.push(...core.flat());
+
+    // Fallback si hay pocos servidores
+    if (servers.length < 3) {
+      for (const v of variants) {
+        const fallback = await Promise.all([
+          getAnimeFenixServers(v, number),
+          getAnimeIDServers(v, number)
+        ]);
+        servers.push(...fallback.flat());
+        if (servers.length > 5) break;
+      }
+    }
+  }
+
+  // =====================
+  // 2️⃣ LATINO / SPANISH
+  // =====================
+  if (lang === "latino" || lang === "spanish") {
+    // Priorizamos fuentes que se especializan en Doblaje
+    const core = await Promise.all([
+      getAnimeLHDServers(slug, number), // Muy bueno para Latino
+      getMonosChinosServers(slug, number)
+    ]);
+
+    servers.push(...core.flat());
+
+    // Fallback para latino usando variantes
+    if (servers.length < 2) {
+      for (const v of variants) {
+        const fallback = await Promise.all([
+          getAnimeFenixServers(v, number), // Fenix a veces tiene opción doblada
+          getAnimeIDServers(v, number)
+        ]);
+        servers.push(...fallback.flat());
+        if (servers.length > 4) break;
+      }
+    }
+  }
+
+  // =====================
+  // 3️⃣ JAPONÉS (Audio Original / Global)
+  // =====================
+  if (lang === "jp" || lang === "japanese") {
+    // Usamos fuentes globales que suelen tener el audio original más limpio
+    const core = await Promise.all([
+      getGogoServers(slug, number),
+      getHiAnimeServers(slug, number)
+    ]);
+
+    servers.push(...core.flat());
+  }
+
+  // =====================
+  // 🔥 LIMPIAR DUPLICADOS Y FILTRAR
+  // =====================
+  const unique = Array.from(
+    new Map(
+      servers
+        .filter(s => s?.embed && s.embed.trim() !== "") // Evita embeds vacíos
+        .map(s => [s.embed, s])
+    ).values()
+  );
+
+  // =====================
+  // 🔥 ORDENAR Y RETORNAR
+  // =====================
+  return sortServers(unique);
 }
-
-// =====================
-// 🔥 PRIORIDAD
-// =====================
-function sortServers(servers: any[]) {
-  return servers.sort((a, b) => {
-
-    // 🥇 JKANIME
     if (a.embed?.includes("jkanime")) return -1;
     if (b.embed?.includes("jkanime")) return 1;
 
