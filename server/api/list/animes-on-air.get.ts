@@ -1,20 +1,20 @@
 import { getOnAir } from "animeflv-scraper";
 
 export default defineEventHandler(async (event) => {
- // 🔥 CORS FIX
+ // ðŸ”¥ CORS FIX
   setHeader(event, "Access-Control-Allow-Origin", "*");
   setHeader(event, "Access-Control-Allow-Methods", "GET,OPTIONS");
   setHeader(event, "Access-Control-Allow-Headers", "Content-Type, x-api-key");
 
   if (event.method === "OPTIONS") return "";
 
-  // 🔥 PREFLIGHT (CORRECTO)
+  // ðŸ”¥ PREFLIGHT (CORRECTO)
   if (event.method === "OPTIONS") {
     setResponseStatus(event, 200);
     return "";
   }
 
-  // 🔐 API KEY
+  // ðŸ”  API KEY
   const apiKey = getHeader(event, "x-api-key");
 
   const envKey =
