@@ -1,16 +1,44 @@
 import { getEpisode } from "animeflv-scraper";
 
-// ðŸ”¹ ANIMEFLV (estable)
+// 🔹 detectar nombre real del server
+function detectServer(url: string) {
+  if (!url) return "unknown";
+
+  if (url.includes("streamtape")) return "streamtape";
+  if (url.includes("filemoon")) return "filemoon";
+  if (url.includes("mp4upload")) return "mp4upload";
+  if (url.includes("dood")) return "doodstream";
+  if (url.includes("ok.ru")) return "okru";
+
+  return "external";
+}
+
+// 🔹 eliminar basura real (SIN romper)
+function isBadEmbed(url: string) {
+  return (
+    !url ||
+    url.startsWith("data:") ||
+    url.includes(".dtd") ||
+    url.includes("schema") ||
+    url.includes("pdf")
+  );
+}
+
+// 🔹 ANIMEFLV (estable)
 export async function getAnimeFLVServers(slug: string, number: number) {
   try {
     const res = await getEpisode(slug, number);
-    return res?.servers || [];
+
+    return (res?.servers || []).map((s: any) => ({
+      name: detectServer(s.url || s.embed),
+      embed: s.url || s.embed
+    }));
   } catch {
     return [];
   }
 }
 
-// ðŸ”¹ JKANIME (scraping básico)
+// 🔹 JKANIME (scraping mejorado)
 export async function getJKAnimeServers(slug: string, number: number) {
   try {
     const url = `https://jkanime.net/${slug}/${number}/`;
@@ -18,42 +46,47 @@ export async function getJKAnimeServers(slug: string, number: number) {
 
     const matches = html.match(/https?:\/\/[^"]+/g) || [];
 
-    return matches.map((link: string) => ({
-      name: "jkanime",
-      embed: link
-    }));
+    return matches
+      .filter((link: string) => !isBadEmbed(link))
+      .map((link: string) => ({
+        name: detectServer(link),
+        embed: link
+      }));
   } catch {
     return [];
   }
 }
 
-// ðŸ”¹ ANIMELHD (latino)
+// 🔹 ANIMELHD (latino)
 export async function getAnimeLHDServers(query: string) {
   try {
     const html = await $fetch(`https://animelhd.com/?s=${encodeURIComponent(query)}`);
     const links = html.match(/https?:\/\/[^"]+/g) || [];
 
-    return links.map((link: string) => ({
-      name: "animelhd",
-      embed: link
-    }));
+    return links
+      .filter((link: string) => !isBadEmbed(link))
+      .map((link: string) => ({
+        name: detectServer(link),
+        embed: link
+      }));
   } catch {
     return [];
   }
 }
 
-// ðŸ”¹ MONOSCHINOS (inestable)
+// 🔹 MONOSCHINOS (inestable)
 export async function getMonosChinosServers(query: string) {
   try {
     const html = await $fetch(`https://monoschinos2.com/search/${query}`);
     const links = html.match(/https?:\/\/[^"]+/g) || [];
 
-    return links.map((link: string) => ({
-      name: "monoschinos",
-      embed: link
-    }));
+    return links
+      .filter((link: string) => !isBadEmbed(link))
+      .map((link: string) => ({
+        name: detectServer(link),
+        embed: link
+      }));
   } catch {
     return [];
   }
 }
-//fix
